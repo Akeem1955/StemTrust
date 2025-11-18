@@ -1,18 +1,4 @@
-
-  # Funding Tracking Platform
-
-  ## Running the code
-
-  Run `npm i` to install the dependencies.
-
-  Run `npm run dev` to start the development server.
-
-
-
-
-
-
-  # ScienceTrust Nigeria - Blockchain-Based Research Funding Platform
+# ScienceTrust Nigeria - Blockchain-Based Research Funding Platform
 
 A transparent, milestone-based funding platform for Nigerian STEM research projects built on Cardano blockchain with **real wallet integration**.
 
@@ -267,4 +253,3 @@ Built for Nigerian STEM research transparency and accountability.
 - Blockfrost API setup
 - IPFS/Arweave integration
 - Security audits
-  
