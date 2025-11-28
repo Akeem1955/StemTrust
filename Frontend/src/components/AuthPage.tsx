@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, ArrowLeft } from 'lucide-react';
+import { Shield, ArrowLeft, Users } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -7,13 +7,41 @@ import { SignInForm } from './SignInForm';
 import { SignUpForm } from './SignUpForm';
 
 interface AuthPageProps {
-  userType: 'organization' | 'individual';
+  userType: 'organization' | 'individual' | 'community';
   onBack: () => void;
   onAuthSuccess: (userData: any) => void;
 }
 
 export function AuthPage({ userType, onBack, onAuthSuccess }: AuthPageProps) {
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
+
+  const getIcon = () => {
+    if (userType === 'community') return <Users className="size-8" />;
+    return <Shield className="size-8" />;
+  };
+
+  const getTitle = () => {
+    if (userType === 'community') return 'Community Member';
+    if (userType === 'organization') return 'Organization';
+    return 'Researcher';
+  };
+
+  const getDescription = () => {
+    if (userType === 'community') {
+      return 'Support research projects and participate in community voting';
+    }
+    if (userType === 'organization') {
+      return 'Fund and manage research projects with blockchain transparency';
+    }
+    return 'Apply for funding and showcase your research progress';
+  };
+
+  const getColor = () => {
+    if (userType === 'community') return 'indigo';
+    return 'green';
+  };
+
+  const colorClass = getColor();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
@@ -31,16 +59,16 @@ export function AuthPage({ userType, onBack, onAuthSuccess }: AuthPageProps) {
       <div className="container mx-auto px-4 py-12">
         <div className="max-w-md mx-auto">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-600 text-white rounded-full mb-4">
-              <Shield className="size-8" />
+            <div className={`inline-flex items-center justify-center w-16 h-16 ${
+              userType === 'community' ? 'bg-indigo-600' : 'bg-green-600'
+            } text-white rounded-full mb-4`}>
+              {getIcon()}
             </div>
             <h1 className="text-3xl mb-2">
-              {userType === 'organization' ? 'Organization' : 'Researcher'} Access
+              {getTitle()} Access
             </h1>
             <p className="text-gray-600">
-              {userType === 'organization' 
-                ? 'Fund and manage research projects with blockchain transparency'
-                : 'Apply for funding and showcase your research progress'}
+              {getDescription()}
             </p>
           </div>
 

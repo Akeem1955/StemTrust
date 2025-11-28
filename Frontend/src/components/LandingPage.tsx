@@ -1,4 +1,4 @@
-import { Shield, Target, Users, TrendingUp, CheckCircle, Wallet } from 'lucide-react';
+import { Shield, Target, Users, TrendingUp, CheckCircle, Wallet, Heart } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { UserType } from '../App';
@@ -15,9 +15,13 @@ export function LandingPage({ onLogin }: LandingPageProps) {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="size-8 text-green-600" />
-            <span className="text-2xl">ScienceTrust Nigeria</span>
+            <span className="text-2xl">StemTrust</span>
           </div>
           <div className="flex gap-3">
+            <Button variant="ghost" onClick={() => onLogin('community')}>
+              <Heart className="mr-2 size-4" />
+              Join Community
+            </Button>
             <Button variant="outline" onClick={() => onLogin('individual')}>
               Login as Researcher
             </Button>
@@ -95,7 +99,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
       <section className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl text-center mb-12">How ScienceTrust Works</h2>
+            <h2 className="text-3xl text-center mb-12">How StemTrust Works</h2>
             <div className="space-y-8">
               <div className="flex gap-6 items-start">
                 <div className="flex-shrink-0 w-12 h-12 bg-green-600 text-white rounded-full flex items-center justify-center">
@@ -256,7 +260,7 @@ export function LandingPage({ onLogin }: LandingPageProps) {
       <footer className="bg-gray-900 text-white py-8">
         <div className="container mx-auto px-4 text-center">
           <p className="text-gray-400">
-            ScienceTrust Nigeria - Blockchain-powered transparent research funding
+            StemTrust - Blockchain-powered transparent research funding
           </p>
           <p className="text-gray-500 text-sm mt-2">
             Built on Cardano blockchain with Mesh, Lucid, and Blockfrost

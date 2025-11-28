@@ -1,4 +1,4 @@
-# ScienceTrust Nigeria - Blockchain-Based Research Funding Platform
+# StemTrust - Blockchain-Based Research Funding Platform
 
 A transparent, milestone-based funding platform for Nigerian STEM research projects built on Cardano blockchain with **real wallet integration**.
 
@@ -12,7 +12,7 @@ Many STEM research projects in Nigeria receive funding from government, NGOs, an
 
 ## Solution
 
-ScienceTrust Nigeria uses Cardano blockchain technology to create a transparent, accountable funding system where:
+StemTrust uses Cardano blockchain technology to create a transparent, accountable funding system where:
 - Funds are locked in smart contracts
 - Released milestone-by-milestone based on community approval
 - All transactions are recorded immutably on-chain
@@ -169,7 +169,7 @@ const lucid = await Lucid.new(
 ## User Flows
 
 ### Authentication & Wallet Connection
-1. Visit ScienceTrust Nigeria landing page
+1. Visit StemTrust landing page
 2. Click "Login as Researcher" or "Login as Organization"
 3. Choose Sign In or Sign Up
 4. Fill in credentials (email, password, profile information)

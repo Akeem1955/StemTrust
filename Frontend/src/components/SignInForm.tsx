@@ -9,7 +9,7 @@ import { useWallet } from './WalletProvider';
 import { InstallWalletGuide } from './InstallWalletGuide';
 
 interface SignInFormProps {
-  userType: 'organization' | 'individual';
+  userType: 'organization' | 'individual' | 'community';
   onSuccess: (userData: any) => void;
   onSwitchToSignUp: () => void;
 }
@@ -47,13 +47,33 @@ export function SignInForm({ userType, onSuccess, onSwitchToSignUp }: SignInForm
 
       // Mock successful signin
       setTimeout(() => {
-        const mockUser = {
-          id: userType === 'organization' ? 'org-1' : 'ind-1',
-          name: userType === 'organization' ? 'Nigerian Research Foundation' : 'Dr. Amaka Okonkwo',
-          email: email,
-          type: userType,
-          walletAddress: address
-        };
+        let mockUser;
+        
+        if (userType === 'community') {
+          mockUser = {
+            id: `community-${Date.now()}`,
+            name: 'Community Member',
+            email: email,
+            type: userType,
+            walletAddress: address
+          };
+        } else if (userType === 'organization') {
+          mockUser = {
+            id: 'org-1',
+            name: 'Nigerian Research Foundation',
+            email: email,
+            type: userType,
+            walletAddress: address
+          };
+        } else {
+          mockUser = {
+            id: 'ind-1',
+            name: 'Dr. Amaka Okonkwo',
+            email: email,
+            type: userType,
+            walletAddress: address
+          };
+        }
 
         onSuccess(mockUser);
         setLoading(false);

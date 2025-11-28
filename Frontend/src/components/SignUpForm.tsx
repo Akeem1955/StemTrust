@@ -10,7 +10,7 @@ import { useWallet } from './WalletProvider';
 import { InstallWalletGuide } from './InstallWalletGuide';
 
 interface SignUpFormProps {
-  userType: 'organization' | 'individual';
+  userType: 'organization' | 'individual' | 'community';
   onSuccess: (userData: any) => void;
   onSwitchToSignIn: () => void;
 }
@@ -66,16 +66,39 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
 
       // Mock successful signup
       setTimeout(() => {
-        const mockUser = {
-          id: userType === 'organization' ? `org-${Date.now()}` : `ind-${Date.now()}`,
-          name: formData.name,
-          email: formData.email,
-          type: userType,
-          walletAddress: address,
-          organization: formData.organization,
-          institution: formData.institution,
-          location: formData.location
-        };
+        let mockUser;
+        
+        if (userType === 'community') {
+          mockUser = {
+            id: `community-${Date.now()}`,
+            name: formData.name,
+            email: formData.email,
+            type: userType,
+            walletAddress: address,
+            location: formData.location,
+            interests: formData.description
+          };
+        } else if (userType === 'organization') {
+          mockUser = {
+            id: `org-${Date.now()}`,
+            name: formData.name,
+            email: formData.email,
+            type: userType,
+            walletAddress: address,
+            organization: formData.organization,
+            location: formData.location
+          };
+        } else {
+          mockUser = {
+            id: `ind-${Date.now()}`,
+            name: formData.name,
+            email: formData.email,
+            type: userType,
+            walletAddress: address,
+            institution: formData.institution,
+            location: formData.location
+          };
+        }
 
         onSuccess(mockUser);
         setLoading(false);
@@ -107,7 +130,7 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
       {/* Organization/Researcher Name */}
       <div>
         <Label htmlFor="name">
-          {userType === 'organization' ? 'Organization Name' : 'Full Name'}
+          {userType === 'organization' ? 'Organization Name' : userType === 'community' ? 'Full Name' : 'Full Name'}
         </Label>
         <div className="relative mt-1">
           {userType === 'organization' ? (
@@ -118,7 +141,13 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
           <Input
             id="name"
             name="name"
-            placeholder={userType === 'organization' ? 'Nigerian Research Foundation' : 'Dr. Amaka Okonkwo'}
+            placeholder={
+              userType === 'organization' 
+                ? 'Nigerian Research Foundation' 
+                : userType === 'community'
+                ? 'John Doe'
+                : 'Dr. Amaka Okonkwo'
+            }
             value={formData.name}
             onChange={handleChange}
             className="pl-10"
@@ -205,7 +234,11 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
       {/* Description */}
       <div>
         <Label htmlFor="description">
-          {userType === 'organization' ? 'Organization Description' : 'Research Focus'}
+          {userType === 'organization' 
+            ? 'Organization Description' 
+            : userType === 'community'
+            ? 'Research Interests (Optional)'
+            : 'Research Focus'}
         </Label>
         <Textarea
           id="description"
@@ -213,12 +246,15 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
           placeholder={
             userType === 'organization'
               ? 'Brief description of your organization and funding goals...'
+              : userType === 'community'
+              ? 'What research areas are you interested in supporting?'
               : 'Brief description of your research areas and expertise...'
           }
           value={formData.description}
           onChange={handleChange}
           rows={3}
           className="mt-1"
+          required={userType !== 'community'}
         />
       </div>
 

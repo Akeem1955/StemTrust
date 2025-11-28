@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, LogOut, Briefcase, Users, TrendingUp } from 'lucide-react';
+import { Plus, LogOut, Briefcase, Users, TrendingUp, UserCog } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
@@ -8,6 +8,7 @@ import { User } from '../App';
 import { mockCampaigns, mockProjects } from '../lib/mockData';
 import { CreateCampaignDialog } from './CreateCampaignDialog';
 import { OnboardProjectDialog } from './OnboardProjectDialog';
+import { MemberManagement } from './MemberManagement';
 import { useWallet } from './WalletProvider';
 
 interface OrganizationDashboardProps {
@@ -102,75 +103,27 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
         </div>
 
         {/* Content Tabs */}
-        <Tabs defaultValue="campaigns">
+        <Tabs defaultValue="projects">
           <TabsList>
             <TabsTrigger value="campaigns">My Campaigns</TabsTrigger>
             <TabsTrigger value="projects">All Projects</TabsTrigger>
+            <TabsTrigger value="members">
+              <UserCog className="mr-2 w-4 h-4" />
+              Members
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="campaigns" className="mt-6">
-            <div className="grid gap-6">
-              {organizationCampaigns.length === 0 ? (
-                <Card className="p-12 text-center">
-                  <Briefcase className="size-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-xl mb-2">No campaigns yet</h3>
-                  <p className="text-gray-600 mb-6">
-                    Create your first campaign to start funding research projects
-                  </p>
-                  <Button onClick={() => setCreateCampaignOpen(true)}>
-                    <Plus className="mr-2 size-4" />
-                    Create Campaign
-                  </Button>
-                </Card>
-              ) : (
-                organizationCampaigns.map(campaign => (
-                  <Card key={campaign.id} className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="text-xl mb-2">{campaign.title}</h3>
-                        <p className="text-gray-600 mb-3">{campaign.description}</p>
-                        <div className="flex gap-4 text-sm">
-                          <span className="text-gray-600">
-                            Budget: <span className="font-medium">{campaign.totalBudget.toLocaleString()} ADA</span>
-                          </span>
-                          <span className="text-gray-600">
-                            Stages: <span className="font-medium">{campaign.stagesCount}</span>
-                          </span>
-                          <span className="text-gray-600">
-                            Projects: <span className="font-medium">{campaign.projects.length}</span>
-                          </span>
-                        </div>
-                      </div>
-                      <Badge variant={campaign.status === 'active' ? 'default' : 'secondary'}>
-                        {campaign.status}
-                      </Badge>
-                    </div>
-                    {campaign.projects.length > 0 && (
-                      <div className="border-t pt-4">
-                        <p className="text-sm mb-3">Campaign Projects:</p>
-                        <div className="space-y-2">
-                          {campaign.projects.map(project => (
-                            <div
-                              key={project.id}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
-                              onClick={() => onViewProject(project.id)}
-                            >
-                              <div>
-                                <p className="font-medium">{project.title}</p>
-                                <p className="text-sm text-gray-600">{project.researcher.name}</p>
-                              </div>
-                              <Badge variant="outline">
-                                Stage {project.currentMilestone}/{project.milestones.length}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </Card>
-                ))
-              )}
-            </div>
+            <Card className="p-16 text-center bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-dashed border-blue-300">
+              <Briefcase className="size-20 text-blue-400 mx-auto mb-4" />
+              <h3 className="text-2xl mb-3">Coming Soon</h3>
+              <p className="text-gray-600 mb-2 max-w-md mx-auto">
+                Campaign management features are under development
+              </p>
+              <p className="text-sm text-gray-500">
+                Soon you'll be able to create funding campaigns with customizable milestone stages (3-10 stages)
+              </p>
+            </Card>
           </TabsContent>
 
           <TabsContent value="projects" className="mt-6">
@@ -180,7 +133,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
                   <Users className="size-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-xl mb-2">No projects yet</h3>
                   <p className="text-gray-600 mb-6">
-                    Onboard projects to your campaigns or wait for researchers to apply
+                    Onboard projects to start funding research
                   </p>
                   <Button onClick={() => setOnboardProjectOpen(true)}>
                     <Plus className="mr-2 size-4" />
@@ -223,6 +176,10 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
                 ))
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="members" className="mt-6">
+            <MemberManagement organizationId={user.id} />
           </TabsContent>
         </Tabs>
       </div>

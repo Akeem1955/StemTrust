@@ -43,10 +43,10 @@ const walletLinks = [
 export function InstallWalletGuide() {
   return (
     <div className="space-y-6">
-      <div className="text-center">
+      <div className="p-6">
         <h3 className="text-xl mb-2">Install a Cardano Wallet</h3>
         <p className="text-gray-600">
-          To use ScienceTrust Nigeria, you need a Cardano wallet. Choose one from the options below:
+          To use StemTrust, you need a Cardano wallet. Choose one from the options below:
         </p>
       </div>
 
@@ -87,7 +87,7 @@ export function InstallWalletGuide() {
           <li>Click on your preferred wallet's Chrome button above</li>
           <li>Install the browser extension from Chrome Web Store</li>
           <li>Create a new wallet and securely store your recovery phrase</li>
-          <li>Return to ScienceTrust and click "Connect Wallet"</li>
+          <li>Return to StemTrust and click "Connect Wallet"</li>
           <li>Select your wallet and approve the connection</li>
         </ol>
       </Card>
@@ -99,7 +99,7 @@ export function InstallWalletGuide() {
           <li>Always verify the wallet extension URL before installing</li>
           <li>Keep your recovery phrase in a safe, offline location</li>
           <li>Use a strong password for your wallet</li>
-          <li>Only connect to trusted websites like ScienceTrust</li>
+          <li>Only connect to trusted websites like StemTrust</li>
         </ul>
       </Card>
     </div>
