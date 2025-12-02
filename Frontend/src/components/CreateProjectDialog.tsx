@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
+import { MilestoneComparisonInfo } from './MilestoneComparisonInfo';
 
 interface CreateProjectDialogProps {
   open: boolean;
@@ -43,6 +44,8 @@ export function CreateProjectDialog({ open, onClose, researcherId }: CreateProje
               You'll submit evidence for each stage to receive funding.
             </AlertDescription>
           </Alert>
+
+          <MilestoneComparisonInfo showForType="researcher" />
 
           <div>
             <Label htmlFor="title">Project Title</Label>

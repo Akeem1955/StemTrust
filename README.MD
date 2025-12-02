@@ -1,11 +1,53 @@
 
   # Funding Tracking Platform
 
-  ## Running the code
+  ## 🚀 Quick Start Guide for Team Members
 
-  Run `npm i` to install the dependencies.
+  ### Prerequisites
+  - Node.js (v18+ recommended)
+  - npm or pnpm
+  - PostgreSQL (for Backend)
+  - Cardano Wallet Extension (Nami, Eternl, etc.) for Frontend interaction
 
-  Run `npm run dev` to start the development server.
+  ### 1. Backend Setup
+  The backend runs on Express, Prisma, and MeshSDK.
+
+  ```bash
+  cd Backend
+  
+  # Install dependencies
+  npm install
+  
+  # Setup Environment Variables
+  # Create a .env file based on .env.example (if available) or ask the lead for keys.
+  # Required: DATABASE_URL, BLOCKFROST, mnemonic, JWT_SECRET
+  
+  # Initialize Database
+  npx prisma db push
+  
+  # Start Server
+  npm run dev
+  ```
+  *Server runs on http://localhost:3001*
+
+  ### 2. Frontend Setup
+  The frontend is a Vite + React application.
+
+  ```bash
+  cd Frontend
+  
+  # Install dependencies
+  npm install
+  
+  # Start Development Server
+  npm run dev
+  ```
+  *Frontend runs on http://localhost:5173*
+
+  ### 3. Smart Contract Notes
+  - The backend initializes smart contract services on startup.
+  - Ensure `BLOCKFROST` and `mnemonic` are set in `Backend/.env` for contract features to work.
+  - If these are missing, the backend will start in "Project-Safe Mode" (contract features disabled).
 
 
 

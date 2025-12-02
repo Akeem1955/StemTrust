@@ -6,6 +6,7 @@ import { Badge } from './ui/badge';
 import { User } from '../App';
 import { mockProjects } from '../lib/mockData';
 import { CreateProjectDialog } from './CreateProjectDialog';
+import { MilestoneQuickReference } from './MilestoneQuickReference';
 import { useWallet } from './WalletProvider';
 
 interface IndividualDashboardProps {
@@ -93,6 +94,11 @@ export function IndividualDashboard({ user, onLogout, onViewProject }: Individua
             <Plus className="mr-2 size-4" />
             Apply for Funding
           </Button>
+        </div>
+
+        {/* Milestone Quick Reference */}
+        <div className="mb-8">
+          <MilestoneQuickReference type="researcher" />
         </div>
 
         {/* Projects */}

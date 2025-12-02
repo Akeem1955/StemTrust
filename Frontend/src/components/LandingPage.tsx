@@ -2,6 +2,7 @@ import { Shield, Target, Users, TrendingUp, CheckCircle, Wallet, Heart } from 'l
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { UserType } from '../App';
+import { MilestoneComparisonChart } from './MilestoneComparisonChart';
 
 interface LandingPageProps {
   onLogin: (userType: UserType) => void;
@@ -171,8 +172,24 @@ export function LandingPage({ onLogin }: LandingPageProps) {
         </div>
       </section>
 
-      {/* Features */}
+      {/* Milestone Comparison Section */}
       <section className="py-16 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl mb-4">Flexible Milestone Structure</h2>
+              <p className="text-gray-600 max-w-2xl mx-auto">
+                StemTrust offers different milestone configurations based on your needs. 
+                Organizations can customize 3-10 stages, while researchers follow a proven 5-stage lifecycle.
+              </p>
+            </div>
+            <MilestoneComparisonChart />
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
             <h2 className="text-3xl text-center mb-12">Platform Features</h2>

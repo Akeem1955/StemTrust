@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String?   @map("password_hash")
+  role           String    // 'organization' | 'researcher' | 'community'
+  walletAddress  String?   @map("wallet_address")
+  walletProvider String?   @map("wallet_provider")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  lastLoginAt    DateTime? @map("last_login_at")
+
+  // Relations
+  organization Organization?
+  researcher   Researcher?
+  uploadedEvidence Evidence[]
+
+  @@map("users")
+}
+
+model Organization {
+  id            String   @id @default(uuid())
+  userId        String   @unique @map("user_id")
+  name          String
+  description   String?  @db.Text
+  logoUrl       String?  @map("logo_url")
+  walletAddress String?  @map("wallet_address")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  user     User     @relation(fields: [userId], references: [id])
+  members  OrganizationMember[]
+  projects Project[]
+  campaigns Campaign[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String    @id @default(uuid())
+  organizationId String    @map("organization_id")
+  email          String
+  name           String?
+  votingPower    Int       @default(1) @map("voting_power")
+  status         String    @default("pending") // 'active' | 'pending' | 'inactive'
+  role           String    @default("member") // 'admin' | 'member' | 'viewer'
+  joinedDate     DateTime  @default(now()) @map("joined_date") @db.Date
+  lastActive     DateTime? @map("last_active")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id])
+  projectTeams ProjectTeamMember[]
+  votes        Vote[]
+
+  @@map("organization_members")
+}
+
+model Researcher {
+  id            String   @id @default(uuid())
+  userId        String   @unique @map("user_id")
+  name          String?
+  institution   String?
+  bio           String?  @db.Text
+  walletAddress String?  @map("wallet_address")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id])
+  projects Project[]
+
+  @@map("researchers")
+}
+
+model Project {
+  id                   String   @id @default(uuid())
+  title                String
+  description          String?  @db.Text
+  category             String?
+  organizationId       String?  @map("organization_id")
+  researcherId         String?  @map("researcher_id")
+  totalFunding         Decimal? @map("total_funding") @db.Decimal(20, 2)
+  fundingReleased      Decimal  @default(0) @map("funding_released") @db.Decimal(20, 2)
+  status               String?  // 'pending_onboarding' | 'active' | 'completed'
+  campaignId           String?  @map("campaign_id")
+  smartContractAddress String?  @map("smart_contract_address")
+  transactionHash      String?  @map("transaction_hash")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  researcher   Researcher?   @relation(fields: [researcherId], references: [id])
+  teamMembers  ProjectTeamMember[]
+  milestones   Milestone[]
+  votes        Vote[]
+  transactions Transaction[]
+
+  @@map("projects")
+}
+
+model ProjectTeamMember {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  memberId  String   @map("member_id")
+  addedAt   DateTime @default(now()) @map("added_at")
+
+  // Relations
+  project Project            @relation(fields: [projectId], references: [id])
+  member  OrganizationMember @relation(fields: [memberId], references: [id])
+
+  @@map("project_team_members")
+}
+
+model Milestone {
+  id                String    @id @default(uuid())
+  projectId         String    @map("project_id")
+  stageNumber       Int       @map("stage_number")
+  title             String
+  description       String?   @db.Text
+  fundingAmount     Decimal?  @map("funding_amount") @db.Decimal(20, 2)
+  fundingPercentage Int?      @map("funding_percentage")
+  durationWeeks     Int?      @map("duration_weeks")
+  status            String?   // 'pending' | 'in_progress' | 'voting' | 'approved'
+  startDate         DateTime? @map("start_date") @db.Date
+  endDate           DateTime? @map("end_date") @db.Date
+  submittedDate     DateTime? @map("submitted_date")
+  approvedDate      DateTime? @map("approved_date")
+
+  // Relations
+  project      Project       @relation(fields: [projectId], references: [id])
+  evidence     Evidence[]
+  votes        Vote[]
+  transactions Transaction[]
+
+  @@map("milestones")
+}
+
+model Evidence {
+  id          String   @id @default(uuid())
+  milestoneId String   @map("milestone_id")
+  type        String?  // 'image' | 'document' | 'link' | 'app'
+  title       String?
+  description String?  @db.Text
+  url         String?
+  ipfsHash    String?  @map("ipfs_hash")
+  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+  uploadedBy  String?  @map("uploaded_by")
+
+  // Relations
+  milestone   Milestone @relation(fields: [milestoneId], references: [id])
+  uploader    User?     @relation(fields: [uploadedBy], references: [id])
+
+  @@map("evidence")
+}
+
+model Vote {
+  id              String   @id @default(uuid())
+  milestoneId     String   @map("milestone_id")
+  projectId       String   @map("project_id")
+  memberId        String   @map("member_id")
+  voteType        String?  @map("vote_type") // 'approve' | 'reject'
+  votingPower     Int?     @map("voting_power")
+  comment         String?  @db.Text
+  transactionHash String?  @map("transaction_hash")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  milestone Milestone          @relation(fields: [milestoneId], references: [id])
+  project   Project            @relation(fields: [projectId], references: [id])
+  member    OrganizationMember @relation(fields: [memberId], references: [id])
+
+  @@map("votes")
+}
+
+model Transaction {
+  id              String   @id @default(uuid())
+  type            String?  // 'funding' | 'withdrawal' | 'milestone_release'
+  amount          Decimal? @db.Decimal(20, 2)
+  fromAddress     String?  @map("from_address")
+  toAddress       String?  @map("to_address")
+  projectId       String?  @map("project_id")
+  milestoneId     String?  @map("milestone_id")
+  transactionHash String   @map("transaction_hash")
+  status          String?  // 'pending' | 'completed' | 'failed'
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project   Project?   @relation(fields: [projectId], references: [id])
+  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+
+  @@map("transactions")
+}
+
+model Campaign {
+  id               String   @id @default(uuid())
+  organizationId   String   @map("organization_id")
+  title            String?
+  description      String?  @db.Text
+  category         String?
+  totalBudget      Decimal? @map("total_budget") @db.Decimal(20, 2)
+  allocatedFunding Decimal  @default(0) @map("allocated_funding") @db.Decimal(20, 2)
+  stagesCount      Int?     @map("stages_count")
+  status           String?  // 'draft' | 'active' | 'closed'
+  startDate        DateTime? @map("start_date") @db.Date
+  endDate          DateTime? @map("end_date") @db.Date
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@map("campaigns")
+}

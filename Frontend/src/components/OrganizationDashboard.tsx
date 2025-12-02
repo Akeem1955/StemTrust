@@ -1,14 +1,18 @@
 import { useState } from 'react';
-import { Plus, LogOut, Briefcase, Users, TrendingUp, UserCog } from 'lucide-react';
+import { Plus, LogOut, Briefcase, Users, TrendingUp, UserCog, UsersIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { User } from '../App';
 import { mockCampaigns, mockProjects } from '../lib/mockData';
+import { ComingSoonDialog } from './ComingSoonDialog';
 import { CreateCampaignDialog } from './CreateCampaignDialog';
 import { OnboardProjectDialog } from './OnboardProjectDialog';
 import { MemberManagement } from './MemberManagement';
+import { ProjectMembersDialog } from './ProjectMembersDialog';
+import { PendingProjectPreview } from './PendingProjectPreview';
+import { CampaignMilestoneView } from './CampaignMilestoneView';
 import { useWallet } from './WalletProvider';
 
 interface OrganizationDashboardProps {
@@ -20,10 +24,13 @@ interface OrganizationDashboardProps {
 export function OrganizationDashboard({ user, onLogout, onViewProject }: OrganizationDashboardProps) {
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
   const [onboardProjectOpen, setOnboardProjectOpen] = useState(false);
+  const [manageMembersProjectId, setManageMembersProjectId] = useState<string | null>(null);
   const { connected, address, balance, network, connectWallet, disconnectWallet } = useWallet();
 
   const organizationCampaigns = mockCampaigns.filter(c => c.organizationId === user.id);
   const allOrgProjects = mockProjects.filter(p => p.sponsor?.id === user.id);
+  const pendingProjects = allOrgProjects.filter(p => p.status === 'pending-onboarding');
+  const activeProjects = allOrgProjects.filter(p => p.status === 'active');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -114,20 +121,60 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
           </TabsList>
 
           <TabsContent value="campaigns" className="mt-6">
-            <Card className="p-16 text-center bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-dashed border-blue-300">
-              <Briefcase className="size-20 text-blue-400 mx-auto mb-4" />
-              <h3 className="text-2xl mb-3">Coming Soon</h3>
-              <p className="text-gray-600 mb-2 max-w-md mx-auto">
-                Campaign management features are under development
-              </p>
-              <p className="text-sm text-gray-500">
-                Soon you'll be able to create funding campaigns with customizable milestone stages (3-10 stages)
-              </p>
-            </Card>
+            {organizationCampaigns.length === 0 ? (
+              <Card className="p-12 text-center">
+                <Briefcase className="size-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-xl mb-2">No campaigns yet</h3>
+                <p className="text-gray-600 mb-6">
+                  Create a campaign to fund multiple research projects under a common theme
+                </p>
+                <Button onClick={() => setCreateCampaignOpen(true)}>
+                  <Plus className="mr-2 size-4" />
+                  Create Campaign
+                </Button>
+              </Card>
+            ) : (
+              <div className="grid gap-6">
+                {organizationCampaigns.map((campaign) => (
+                  <Card key={campaign.id} className="p-6 hover:shadow-lg transition-shadow">
+                    <div className="space-y-4">
+                      {/* Header */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-xl font-medium">{campaign.title}</h3>
+                            <Badge>{campaign.category}</Badge>
+                            <Badge variant="outline">
+                              {campaign.stagesCount} Stages
+                            </Badge>
+                          </div>
+                          <p className="text-gray-600 mb-3">{campaign.description}</p>
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span className="flex items-center gap-1">
+                              <TrendingUp className="w-4 h-4" />
+                              {campaign.totalBudget.toLocaleString()} ADA
+                            </span>
+                            <span>{campaign.projects.length} Projects</span>
+                            <span>Created {new Date(campaign.createdAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Milestone Templates */}
+                      <CampaignMilestoneView
+                        milestones={campaign.milestoneTemplates}
+                        totalBudget={campaign.totalBudget}
+                        isExpanded={false}
+                      />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="projects" className="mt-6">
-            <div className="grid gap-6">
+            <div className="space-y-8">
               {allOrgProjects.length === 0 ? (
                 <Card className="p-12 text-center">
                   <Users className="size-16 text-gray-300 mx-auto mb-4" />
@@ -141,39 +188,121 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
                   </Button>
                 </Card>
               ) : (
-                allOrgProjects.map(project => (
-                  <Card
-                    key={project.id}
-                    className="p-6 cursor-pointer hover:shadow-lg transition-shadow"
-                    onClick={() => onViewProject(project.id)}
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h3 className="text-xl mb-2">{project.title}</h3>
-                        <p className="text-gray-600 mb-3">{project.description}</p>
-                        <div className="flex items-center gap-4 text-sm">
-                          <span className="text-gray-600">
-                            {project.researcher.name} • {project.researcher.institution}
-                          </span>
-                        </div>
+                <>
+                  {/* Pending Onboarding Projects */}
+                  {pendingProjects.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium">Pending Onboarding ({pendingProjects.length})</h3>
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                          Awaiting Researcher
+                        </Badge>
                       </div>
-                      <Badge>{project.category}</Badge>
-                    </div>
-                    <div className="flex items-center justify-between pt-4 border-t">
-                      <div className="flex gap-6 text-sm">
-                        <span className="text-gray-600">
-                          Total: <span className="font-medium">{project.totalFunding.toLocaleString()} ADA</span>
-                        </span>
-                        <span className="text-gray-600">
-                          Backers: <span className="font-medium">{project.backers.length}</span>
-                        </span>
+                      <div className="grid gap-6">
+                        {pendingProjects.map(project => (
+                          <Card key={project.id} className="p-6">
+                            <div className="space-y-4">
+                              {/* Project Header */}
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <h4 className="text-xl mb-2">{project.title}</h4>
+                                  <p className="text-gray-600 mb-3">{project.description}</p>
+                                  <div className="flex items-center gap-4 text-sm">
+                                    <span className="text-gray-600">
+                                      {project.researcher.name} • {project.researcher.institution}
+                                    </span>
+                                  </div>
+                                </div>
+                                <Badge>{project.category}</Badge>
+                              </div>
+
+                              {/* Pending Status */}
+                              <PendingProjectPreview project={project} />
+
+                              {/* Actions */}
+                              <div className="flex items-center gap-3 pt-4 border-t">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setManageMembersProjectId(project.id);
+                                  }}
+                                >
+                                  <UsersIcon className="mr-2 w-4 h-4" />
+                                  Manage Team ({project.assignedMembers?.length || 0})
+                                </Button>
+                                <div className="text-sm text-gray-600">
+                                  Total: <span className="font-medium">{project.totalFunding.toLocaleString()} ADA</span>
+                                </div>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
                       </div>
-                      <Badge variant="outline">
-                        Milestone {project.currentMilestone}/{project.milestones.length}
-                      </Badge>
                     </div>
-                  </Card>
-                ))
+                  )}
+
+                  {/* Active Projects */}
+                  {activeProjects.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium">Active Projects ({activeProjects.length})</h3>
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                          Active
+                        </Badge>
+                      </div>
+                      <div className="grid gap-6">
+                        {activeProjects.map(project => (
+                          <Card
+                            key={project.id}
+                            className="p-6 cursor-pointer hover:shadow-lg transition-shadow"
+                            onClick={() => onViewProject(project.id)}
+                          >
+                            <div className="flex items-start justify-between mb-4">
+                              <div className="flex-1">
+                                <h3 className="text-xl mb-2">{project.title}</h3>
+                                <p className="text-gray-600 mb-3">{project.description}</p>
+                                <div className="flex items-center gap-4 text-sm">
+                                  <span className="text-gray-600">
+                                    {project.researcher.name} • {project.researcher.institution}
+                                  </span>
+                                </div>
+                              </div>
+                              <Badge>{project.category}</Badge>
+                            </div>
+                            <div className="flex items-center justify-between pt-4 border-t">
+                              <div className="flex gap-6 text-sm">
+                                <span className="text-gray-600">
+                                  Total: <span className="font-medium">{project.totalFunding.toLocaleString()} ADA</span>
+                                </span>
+                                <span className="text-gray-600">
+                                  Team: <span className="font-medium">{project.assignedMembers?.length || project.backers.length}</span>
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setManageMembersProjectId(project.id);
+                                  }}
+                                >
+                                  <UsersIcon className="mr-2 w-4 h-4" />
+                                  Team
+                                </Button>
+                                <Badge variant="outline">
+                                  Milestone {project.currentMilestone}/{project.milestones.length}
+                                </Badge>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </TabsContent>
@@ -187,6 +316,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
       <CreateCampaignDialog
         open={createCampaignOpen}
         onClose={() => setCreateCampaignOpen(false)}
+        organizationId={user.id}
       />
 
       <OnboardProjectDialog
@@ -194,6 +324,17 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
         onClose={() => setOnboardProjectOpen(false)}
         organizationId={user.id}
       />
+
+      {manageMembersProjectId && (
+        <ProjectMembersDialog
+          open={!!manageMembersProjectId}
+          onClose={() => setManageMembersProjectId(null)}
+          projectId={manageMembersProjectId}
+          projectTitle={allOrgProjects.find(p => p.id === manageMembersProjectId)?.title || ''}
+          organizationId={user.id}
+          currentMembers={allOrgProjects.find(p => p.id === manageMembersProjectId)?.assignedMembers || []}
+        />
+      )}
     </div>
   );
 }

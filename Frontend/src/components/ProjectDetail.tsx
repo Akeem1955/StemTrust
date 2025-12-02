@@ -10,6 +10,7 @@ import { User } from '../App';
 import { mockProjects, Project, Milestone } from '../lib/mockData';
 import { SubmitEvidenceDialog } from './SubmitEvidenceDialog';
 import { VotingPanel } from './VotingPanel';
+import { PendingProjectPreview } from './PendingProjectPreview';
 
 interface ProjectDetailProps {
   projectId: string;
@@ -32,8 +33,31 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
     );
   }
 
+  // If project is pending onboarding, show pending view for organizations
+  if (project.status === 'pending-onboarding' && currentUser?.role === 'organization') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white border-b">
+          <div className="container mx-auto px-4 py-4">
+            <Button variant="ghost" onClick={onBack}>
+              <ArrowLeft className="mr-2 size-4" />
+              Back to Dashboard
+            </Button>
+          </div>
+        </header>
+        <div className="container mx-auto px-4 py-8">
+          <Card className="p-8">
+            <h2 className="text-2xl mb-4">{project.title}</h2>
+            <PendingProjectPreview project={project} />
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   const isResearcher = currentUser?.id === project.researcher.id;
-  const isBacker = project.backers.some(b => b.id === currentUser?.id);
+  const isBacker = project.backers.some(b => b.id === currentUser?.id) || 
+                    project.assignedMembers?.some(m => m.email === currentUser?.email);
 
   const completedMilestones = project.milestones.filter(m => m.status === 'approved').length;
   const progressPercentage = (completedMilestones / project.milestones.length) * 100;

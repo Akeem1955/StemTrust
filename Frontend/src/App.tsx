@@ -12,6 +12,7 @@ import { ProjectSupportModal } from './components/community/ProjectSupportModal'
 import { CommunityProjectDetail } from './components/community/CommunityProjectDetail';
 import { MyProjects } from './components/community/MyProjects';
 import { SupportConfirmationModal } from './components/community/SupportConfirmationModal';
+import { Toaster } from './components/ui/sonner';
 
 export type UserType = 'organization' | 'individual' | 'community' | null;
 
@@ -20,6 +21,7 @@ export interface User {
   name: string;
   email?: string;
   type: UserType;
+  role?: 'organization' | 'individual' | 'community';
   walletAddress?: string;
   organization?: string;
   institution?: string;
@@ -46,7 +48,12 @@ export default function App() {
   };
 
   const handleAuthSuccess = (userData: User) => {
-    setCurrentUser(userData);
+    // Set role based on type if not already set
+    const userWithRole = {
+      ...userData,
+      role: userData.role || userData.type as 'organization' | 'individual' | 'community'
+    };
+    setCurrentUser(userWithRole);
     // Route community members to community dashboard, others to standard dashboard
     if (userData.type === 'community') {
       setCurrentView('community-dashboard');
@@ -179,6 +186,7 @@ export default function App() {
         onCloseSupportConfirmation={() => setSupportConfirmationOpen(false)}
         supportedProjects={supportedProjects}
       />
+      <Toaster />
     </WalletProvider>
   );
 }

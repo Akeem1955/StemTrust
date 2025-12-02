@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { decode } from 'cbor-x';
 
 /**
  * WalletProvider - Real Cardano Wallet Integration
@@ -36,6 +37,15 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
  * const api = await window.cardano.nami.enable();
  * lucid.selectWallet(api);
  */
+
+// Helper to convert hex string to Uint8Array
+const hexToBytes = (hex: string) => {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+};
 
 // Cardano Wallet Types
 interface CardanoWallet {
@@ -179,9 +189,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // Get balance
       try {
         const balanceHex = await api.getBalance();
-        // Convert hex balance to ADA (1 ADA = 1,000,000 Lovelace)
-        const lovelace = parseInt(balanceHex, 16);
-        const ada = (lovelace / 1_000_000).toFixed(2);
+        // Decode CBOR balance
+        const balanceBytes = hexToBytes(balanceHex);
+        const decoded = decode(balanceBytes);
+        
+        // Value can be a number (coin) or an array [coin, multiasset]
+        // cbor-x might return BigInt for large numbers
+        const lovelace = Array.isArray(decoded) ? decoded[0] : decoded;
+        
+        // Convert to ADA (1 ADA = 1,000,000 Lovelace)
+        const lovelaceNum = Number(lovelace);
+        const ada = (lovelaceNum / 1_000_000).toFixed(2);
         setBalance(`${ada} ADA`);
       } catch (err) {
         console.error('Error fetching balance:', err);

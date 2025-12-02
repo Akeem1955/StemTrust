@@ -1,6 +1,6 @@
 // Mock API configuration
 // Replace these URLs with your real backend endpoints when ready
-const API_BASE_URL = 'https://api.stemtrust.example.com';
+const API_BASE_URL = 'http://localhost:3001/api';
 const MOCK_DELAY = 800; // Simulate network delay
 
 // Helper to simulate API delay
@@ -13,6 +13,32 @@ async function mockApiCall<T>(data: T, shouldSucceed = true): Promise<T> {
     throw new Error('API call failed');
   }
   return data;
+}
+
+// Helper to try real API first, then fallback to mock
+async function fetchWithFallback<T>(
+  endpoint: string, 
+  options: RequestInit = {}, 
+  fallbackFn: () => Promise<T> | T
+): Promise<T> {
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.warn(`API call to ${endpoint} failed, falling back to mock data:`, error);
+    return fallbackFn();
+  }
 }
 
 // ============================================
@@ -50,7 +76,7 @@ let mockMembers: OrganizationMember[] = [
     id: 'member-1',
     email: 'john.doe@example.com',
     name: 'John Doe',
-    votingPower: 1,
+    votingPower: 3,
     status: 'active',
     joinedDate: '2024-01-15',
     lastActive: '2024-11-28',
@@ -60,7 +86,7 @@ let mockMembers: OrganizationMember[] = [
     id: 'member-2',
     email: 'jane.smith@example.com',
     name: 'Jane Smith',
-    votingPower: 2,
+    votingPower: 5,
     status: 'active',
     joinedDate: '2024-02-01',
     lastActive: '2024-11-27',
@@ -75,90 +101,161 @@ let mockMembers: OrganizationMember[] = [
     joinedDate: '2024-11-20',
     role: 'viewer',
   },
+  {
+    id: 'member-4',
+    email: 'sarah.okafor@unilag.edu.ng',
+    name: 'Dr. Sarah Okafor',
+    votingPower: 5,
+    status: 'active',
+    joinedDate: '2024-03-10',
+    lastActive: '2024-11-29',
+    role: 'admin',
+  },
+  {
+    id: 'member-5',
+    email: 'james.adebayo@gmail.com',
+    name: 'James Adebayo',
+    votingPower: 2,
+    status: 'active',
+    joinedDate: '2024-04-15',
+    lastActive: '2024-11-28',
+    role: 'member',
+  },
+  {
+    id: 'member-6',
+    email: 'grace.okeke@example.com',
+    name: 'Grace Okeke',
+    votingPower: 4,
+    status: 'active',
+    joinedDate: '2024-05-20',
+    lastActive: '2024-11-29',
+    role: 'member',
+  },
+  {
+    id: 'member-7',
+    email: 'david.nwosu@example.com',
+    name: 'David Nwosu',
+    votingPower: 2,
+    status: 'active',
+    joinedDate: '2024-06-01',
+    lastActive: '2024-11-27',
+    role: 'member',
+  },
+  {
+    id: 'member-8',
+    email: 'mary.eze@example.com',
+    name: 'Mary Eze',
+    votingPower: 3,
+    status: 'active',
+    joinedDate: '2024-07-10',
+    lastActive: '2024-11-29',
+    role: 'member',
+  },
+  {
+    id: 'member-9',
+    email: 'ahmed.bello@example.com',
+    votingPower: 1,
+    status: 'pending',
+    joinedDate: '2024-11-25',
+    role: 'viewer',
+  },
+  {
+    id: 'member-10',
+    email: 'chioma.nnadi@example.com',
+    name: 'Chioma Nnadi',
+    votingPower: 2,
+    status: 'active',
+    joinedDate: '2024-08-15',
+    lastActive: '2024-11-28',
+    role: 'viewer',
+  },
 ];
 
 /**
  * Get all members for an organization
  */
 export async function getOrganizationMembers(organizationId: string): Promise<OrganizationMember[]> {
-  console.log(`[Mock API] GET ${API_BASE_URL}/organizations/${organizationId}/members`);
-  
-  // In production, replace with:
-  // const response = await fetch(`${API_BASE_URL}/organizations/${organizationId}/members`);
-  // return response.json();
-  
-  return mockApiCall(mockMembers);
+  return fetchWithFallback(
+    `/organizations/${organizationId}/members`,
+    { method: 'GET' },
+    () => {
+      console.log(`[Mock API] GET ${API_BASE_URL}/organizations/${organizationId}/members`);
+      return mockApiCall(mockMembers);
+    }
+  );
 }
 
 /**
  * Add a new member to an organization
  */
 export async function addOrganizationMember(request: AddMemberRequest): Promise<OrganizationMember> {
-  console.log(`[Mock API] POST ${API_BASE_URL}/organizations/${request.organizationId}/members`, request);
-  
-  // In production, replace with:
-  // const response = await fetch(`${API_BASE_URL}/organizations/${request.organizationId}/members`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(request),
-  // });
-  // return response.json();
-  
-  const newMember: OrganizationMember = {
-    id: `member-${Date.now()}`,
-    email: request.email,
-    votingPower: request.votingPower || 1,
-    status: 'pending',
-    joinedDate: new Date().toISOString().split('T')[0],
-    role: request.role || 'viewer',
-  };
-  
-  mockMembers.push(newMember);
-  return mockApiCall(newMember);
+  return fetchWithFallback(
+    `/organizations/${request.organizationId}/members`,
+    { 
+      method: 'POST',
+      body: JSON.stringify(request)
+    },
+    () => {
+      console.log(`[Mock API] POST ${API_BASE_URL}/organizations/${request.organizationId}/members`, request);
+      
+      const newMember: OrganizationMember = {
+        id: `member-${Date.now()}`,
+        email: request.email,
+        votingPower: request.votingPower || 1,
+        status: 'pending',
+        joinedDate: new Date().toISOString().split('T')[0],
+        role: request.role || 'viewer',
+      };
+      
+      mockMembers.push(newMember);
+      return mockApiCall(newMember);
+    }
+  );
 }
 
 /**
  * Update a member's settings
  */
 export async function updateOrganizationMember(request: UpdateMemberRequest): Promise<OrganizationMember> {
-  console.log(`[Mock API] PATCH ${API_BASE_URL}/members/${request.memberId}`, request);
-  
-  // In production, replace with:
-  // const response = await fetch(`${API_BASE_URL}/members/${request.memberId}`, {
-  //   method: 'PATCH',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(request),
-  // });
-  // return response.json();
-  
-  const memberIndex = mockMembers.findIndex(m => m.id === request.memberId);
-  if (memberIndex === -1) {
-    throw new Error('Member not found');
-  }
-  
-  mockMembers[memberIndex] = {
-    ...mockMembers[memberIndex],
-    ...(request.votingPower !== undefined && { votingPower: request.votingPower }),
-    ...(request.role !== undefined && { role: request.role }),
-    ...(request.status !== undefined && { status: request.status }),
-  };
-  
-  return mockApiCall(mockMembers[memberIndex]);
+  return fetchWithFallback(
+    `/members/${request.memberId}`,
+    { 
+      method: 'PATCH',
+      body: JSON.stringify(request)
+    },
+    () => {
+      console.log(`[Mock API] PATCH ${API_BASE_URL}/members/${request.memberId}`, request);
+      
+      const memberIndex = mockMembers.findIndex(m => m.id === request.memberId);
+      if (memberIndex === -1) {
+        throw new Error('Member not found');
+      }
+      
+      mockMembers[memberIndex] = {
+        ...mockMembers[memberIndex],
+        ...(request.votingPower !== undefined && { votingPower: request.votingPower }),
+        ...(request.role !== undefined && { role: request.role }),
+        ...(request.status !== undefined && { status: request.status }),
+      };
+      
+      return mockApiCall(mockMembers[memberIndex]);
+    }
+  );
 }
 
 /**
  * Remove a member from an organization
  */
 export async function removeOrganizationMember(memberId: string): Promise<void> {
-  console.log(`[Mock API] DELETE ${API_BASE_URL}/members/${memberId}`);
-  
-  // In production, replace with:
-  // await fetch(`${API_BASE_URL}/members/${memberId}`, {
-  //   method: 'DELETE',
-  // });
-  
-  mockMembers = mockMembers.filter(m => m.id !== memberId);
-  return mockApiCall(undefined);
+  return fetchWithFallback(
+    `/members/${memberId}`,
+    { method: 'DELETE' },
+    () => {
+      console.log(`[Mock API] DELETE ${API_BASE_URL}/members/${memberId}`);
+      mockMembers = mockMembers.filter(m => m.id !== memberId);
+      return mockApiCall(undefined);
+    }
+  );
 }
 
 // ============================================
@@ -178,6 +275,9 @@ export interface OnboardProjectRequest {
     fundingAmount: number;
     durationWeeks: number;
   }>;
+  teamMemberIds?: string[]; // Selected team members to monitor this project
+  milestoneMode?: 'fixed' | 'custom';
+  stagesCount?: number;
 }
 
 export interface OnboardProjectResponse {
@@ -192,26 +292,27 @@ export interface OnboardProjectResponse {
  * Onboard a new project and send login instructions to researcher
  */
 export async function onboardProject(request: OnboardProjectRequest): Promise<OnboardProjectResponse> {
-  console.log(`[Mock API] POST ${API_BASE_URL}/projects/onboard`, request);
-  console.log(`[Mock API] Sending login instructions to ${request.researcherEmail}`);
-  
-  // In production, replace with:
-  // const response = await fetch(`${API_BASE_URL}/projects/onboard`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(request),
-  // });
-  // return response.json();
-  
-  const response: OnboardProjectResponse = {
-    projectId: `proj-${Date.now()}`,
-    status: 'success',
-    message: `Project "${request.projectTitle}" has been onboarded successfully. Login instructions sent to ${request.researcherEmail}`,
-    emailSent: true,
-    researcherEmail: request.researcherEmail,
-  };
-  
-  return mockApiCall(response);
+  return fetchWithFallback(
+    `/projects/onboard`,
+    { 
+      method: 'POST',
+      body: JSON.stringify(request)
+    },
+    () => {
+      console.log(`[Mock API] POST ${API_BASE_URL}/projects/onboard`, request);
+      console.log(`[Mock API] Sending login instructions to ${request.researcherEmail}`);
+      
+      const response: OnboardProjectResponse = {
+        projectId: `proj-${Date.now()}`,
+        status: 'success',
+        message: `Project "${request.projectTitle}" has been onboarded successfully. Login instructions sent to ${request.researcherEmail}`,
+        emailSent: true,
+        researcherEmail: request.researcherEmail,
+      };
+      
+      return mockApiCall(response);
+    }
+  );
 }
 
 // ============================================
@@ -239,23 +340,153 @@ export interface CreateCampaignResponse {
  * Create a new campaign
  */
 export async function createCampaign(request: CreateCampaignRequest): Promise<CreateCampaignResponse> {
-  console.log(`[Mock API] POST ${API_BASE_URL}/campaigns`, request);
-  
-  // In production, replace with:
-  // const response = await fetch(`${API_BASE_URL}/campaigns`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(request),
-  // });
-  // return response.json();
-  
-  const response: CreateCampaignResponse = {
-    campaignId: `campaign-${Date.now()}`,
-    status: 'success',
-    message: `Campaign "${request.title}" created successfully`,
-  };
-  
-  return mockApiCall(response);
+  return fetchWithFallback(
+    `/campaigns`,
+    { 
+      method: 'POST',
+      body: JSON.stringify(request)
+    },
+    () => {
+      console.log(`[Mock API] POST ${API_BASE_URL}/campaigns`, request);
+      
+      const response: CreateCampaignResponse = {
+        campaignId: `campaign-${Date.now()}`,
+        status: 'success',
+        message: `Campaign "${request.title}" created successfully`,
+      };
+      
+      return mockApiCall(response);
+    }
+  );
+}
+
+// ============================================
+// PROJECT MEMBER MANAGEMENT API
+// ============================================
+
+export interface ProjectMember {
+  id: string;
+  name: string;
+  email: string;
+  votingPower: number;
+  role: 'admin' | 'member' | 'viewer';
+  status: 'active' | 'pending';
+}
+
+export interface AddProjectMemberRequest {
+  projectId: string;
+  name: string;
+  email: string;
+  votingPower?: number;
+  role?: 'admin' | 'member' | 'viewer';
+}
+
+export interface UpdateProjectMemberRequest {
+  projectId: string;
+  memberId: string;
+  votingPower?: number;
+  role?: 'admin' | 'member' | 'viewer';
+  status?: 'active' | 'pending';
+}
+
+// Mock data for project members
+let mockProjectMembers: Record<string, ProjectMember[]> = {};
+
+/**
+ * Get all members for a specific project
+ */
+export async function getProjectMembers(projectId: string): Promise<ProjectMember[]> {
+  return fetchWithFallback(
+    `/projects/${projectId}/members`,
+    { method: 'GET' },
+    () => {
+      console.log(`[Mock API] GET ${API_BASE_URL}/projects/${projectId}/members`);
+      return mockApiCall(mockProjectMembers[projectId] || []);
+    }
+  );
+}
+
+/**
+ * Add a new member to a project
+ */
+export async function addProjectMember(request: AddProjectMemberRequest): Promise<ProjectMember> {
+  return fetchWithFallback(
+    `/projects/${request.projectId}/members`,
+    { 
+      method: 'POST',
+      body: JSON.stringify(request)
+    },
+    () => {
+      console.log(`[Mock API] POST ${API_BASE_URL}/projects/${request.projectId}/members`, request);
+      
+      const newMember: ProjectMember = {
+        id: `pm-${Date.now()}`,
+        name: request.name,
+        email: request.email,
+        votingPower: request.votingPower || 1,
+        role: request.role || 'member',
+        status: 'active',
+      };
+      
+      if (!mockProjectMembers[request.projectId]) {
+        mockProjectMembers[request.projectId] = [];
+      }
+      mockProjectMembers[request.projectId].push(newMember);
+      
+      return mockApiCall(newMember);
+    }
+  );
+}
+
+/**
+ * Update a project member's settings
+ */
+export async function updateProjectMember(request: UpdateProjectMemberRequest): Promise<ProjectMember> {
+  return fetchWithFallback(
+    `/projects/${request.projectId}/members/${request.memberId}`,
+    { 
+      method: 'PATCH',
+      body: JSON.stringify(request)
+    },
+    () => {
+      console.log(`[Mock API] PATCH ${API_BASE_URL}/projects/${request.projectId}/members/${request.memberId}`, request);
+      
+      const members = mockProjectMembers[request.projectId] || [];
+      const memberIndex = members.findIndex(m => m.id === request.memberId);
+      
+      if (memberIndex === -1) {
+        throw new Error('Member not found');
+      }
+      
+      members[memberIndex] = {
+        ...members[memberIndex],
+        ...(request.votingPower !== undefined && { votingPower: request.votingPower }),
+        ...(request.role !== undefined && { role: request.role }),
+        ...(request.status !== undefined && { status: request.status }),
+      };
+      
+      return mockApiCall(members[memberIndex]);
+    }
+  );
+}
+
+/**
+ * Remove a member from a project
+ */
+export async function removeProjectMember(projectId: string, memberId: string): Promise<void> {
+  return fetchWithFallback(
+    `/projects/${projectId}/members/${memberId}`,
+    { method: 'DELETE' },
+    () => {
+      console.log(`[Mock API] DELETE ${API_BASE_URL}/projects/${projectId}/members/${memberId}`);
+      
+      if (mockProjectMembers[projectId]) {
+        mockProjectMembers[projectId] = mockProjectMembers[projectId].filter(m => m.id !== memberId);
+      }
+      
+      return mockApiCall(undefined);
+    }
+  );
 }
 
 // ============================================
@@ -281,23 +512,24 @@ export interface SubmitVoteResponse {
  * Submit a vote for a milestone (considers voting power)
  */
 export async function submitVote(request: SubmitVoteRequest): Promise<SubmitVoteResponse> {
-  console.log(`[Mock API] POST ${API_BASE_URL}/votes`, request);
-  console.log(`[Mock API] Vote weight: ${request.votingPower}`);
-  
-  // In production, replace with:
-  // const response = await fetch(`${API_BASE_URL}/votes`, {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify(request),
-  // });
-  // return response.json();
-  
-  const response: SubmitVoteResponse = {
-    success: true,
-    voteId: `vote-${Date.now()}`,
-    weightedVote: request.votingPower,
-    message: `Your vote (weight: ${request.votingPower}) has been recorded successfully`,
-  };
-  
-  return mockApiCall(response);
+  return fetchWithFallback(
+    `/votes`,
+    { 
+      method: 'POST',
+      body: JSON.stringify(request)
+    },
+    () => {
+      console.log(`[Mock API] POST ${API_BASE_URL}/votes`, request);
+      console.log(`[Mock API] Vote weight: ${request.votingPower}`);
+      
+      const response: SubmitVoteResponse = {
+        success: true,
+        voteId: `vote-${Date.now()}`,
+        weightedVote: request.votingPower,
+        message: `Your vote (weight: ${request.votingPower}) has been recorded successfully`,
+      };
+      
+      return mockApiCall(response);
+    }
+  );
 }
