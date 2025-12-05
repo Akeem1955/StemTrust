@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { useWallet } from './WalletProvider';
 import { InstallWalletGuide } from './InstallWalletGuide';
+import { api, UserRole } from '../lib/api';
 
 interface SignUpFormProps {
   userType: 'organization' | 'individual' | 'community';
@@ -57,55 +58,44 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
         throw new Error('Please connect your Cardano wallet first');
       }
 
-      // In production: Call backend API to create account
-      // const response = await fetch('/api/auth/signup', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ ...formData, walletAddress: address, userType })
-      // });
+      // Map frontend userType to backend UserRole
+      let role: UserRole = 'community';
+      if (userType === 'organization') role = 'organization';
+      if (userType === 'individual') role = 'researcher';
 
-      // Mock successful signup
-      setTimeout(() => {
-        let mockUser;
-        
-        if (userType === 'community') {
-          mockUser = {
-            id: `community-${Date.now()}`,
-            name: formData.name,
-            email: formData.email,
-            type: userType,
-            walletAddress: address,
-            location: formData.location,
-            interests: formData.description
-          };
-        } else if (userType === 'organization') {
-          mockUser = {
-            id: `org-${Date.now()}`,
-            name: formData.name,
-            email: formData.email,
-            type: userType,
-            walletAddress: address,
-            organization: formData.organization,
-            location: formData.location
-          };
-        } else {
-          mockUser = {
-            id: `ind-${Date.now()}`,
-            name: formData.name,
-            email: formData.email,
-            type: userType,
-            walletAddress: address,
-            institution: formData.institution,
-            location: formData.location
-          };
-        }
+      // Call backend API
+      const response = await api.signUp({
+        email: formData.email,
+        password: formData.password,
+        role: role,
+        name: formData.name,
+        organizationName: formData.name, // Use the actual name, not the type
+        researchInstitution: formData.institution,
+        location: formData.location,
+        description: formData.description
+      });
 
-        onSuccess(mockUser);
-        setLoading(false);
-      }, 2000);
+      // Store token
+      api.setToken(response.token);
+
+      // Enhance user object with wallet address and type for frontend compatibility
+      const userData = {
+        ...response.user,
+        type: userType,
+        walletAddress: address,
+        // Ensure these fields are present for frontend display if backend didn't return them
+        name: formData.name,
+        organization: formData.name, // Use name for organization field, not the type
+        institution: formData.institution,
+        location: formData.location,
+        interests: formData.description
+      };
+
+      onSuccess(userData);
+      setLoading(false);
 
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to sign up');
       setLoading(false);
     }
   };
@@ -142,11 +132,11 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
             id="name"
             name="name"
             placeholder={
-              userType === 'organization' 
-                ? 'Nigerian Research Foundation' 
+              userType === 'organization'
+                ? 'Nigerian Research Foundation'
                 : userType === 'community'
-                ? 'John Doe'
-                : 'Dr. Amaka Okonkwo'
+                  ? 'John Doe'
+                  : 'Dr. Amaka Okonkwo'
             }
             value={formData.name}
             onChange={handleChange}
@@ -234,11 +224,11 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
       {/* Description */}
       <div>
         <Label htmlFor="description">
-          {userType === 'organization' 
-            ? 'Organization Description' 
+          {userType === 'organization'
+            ? 'Organization Description'
             : userType === 'community'
-            ? 'Research Interests (Optional)'
-            : 'Research Focus'}
+              ? 'Research Interests (Optional)'
+              : 'Research Focus'}
         </Label>
         <Textarea
           id="description"
@@ -247,8 +237,8 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
             userType === 'organization'
               ? 'Brief description of your organization and funding goals...'
               : userType === 'community'
-              ? 'What research areas are you interested in supporting?'
-              : 'Brief description of your research areas and expertise...'
+                ? 'What research areas are you interested in supporting?'
+                : 'Brief description of your research areas and expertise...'
           }
           value={formData.description}
           onChange={handleChange}

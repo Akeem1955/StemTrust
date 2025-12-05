@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { 
-  Milestone, 
-  Evidence, 
-  SubmitEvidenceRequest, 
+import {
+  Milestone,
+  Evidence,
+  SubmitEvidenceRequest,
   SubmitEvidenceResponse,
   Vote
 } from '../types/api';
@@ -71,7 +71,7 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id/start', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const milestone = await prisma.milestone.update({
       where: { id },
       data: {
@@ -96,16 +96,19 @@ router.post('/:id/submit', async (req, res) => {
     const { id } = req.params;
     const body: SubmitEvidenceRequest = req.body;
 
+    // Validate that evidence was provided
+    const evidenceList = body?.evidence || [];
+
     // 1. Create Evidence records
-    if (body.evidence && body.evidence.length > 0) {
+    if (evidenceList.length > 0) {
       await prisma.evidence.createMany({
-        data: body.evidence.map(e => ({
+        data: evidenceList.map(e => ({
           milestoneId: id,
           type: e.type,
           title: e.title,
           description: e.description,
           url: e.url,
-          uploadedBy: 'user-id-placeholder' // TODO: Get from auth context
+          uploadedBy: null // TODO: Get actual user ID from auth context
         }))
       });
     }
@@ -119,14 +122,15 @@ router.post('/:id/submit', async (req, res) => {
       }
     });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       milestoneId: id,
-      evidenceCount: body.evidence.length,
+      evidenceCount: evidenceList.length,
       message: 'Evidence submitted successfully',
       milestoneStatus: 'voting'
     } as SubmitEvidenceResponse);
   } catch (error) {
+    console.error('Error submitting evidence:', error);
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR' } });
   }
 });
@@ -169,20 +173,22 @@ router.post('/:id/evidence', async (req, res) => {
         title: body.title,
         description: body.description,
         url: body.url,
-        uploadedBy: 'user-id-placeholder' // TODO: Get from auth context
+        uploadedBy: null // TODO: Get actual user ID from auth context
       }
     });
 
-    res.json({ success: true, data: {
-      id: evidence.id,
-      milestoneId: evidence.milestoneId,
-      type: evidence.type,
-      title: evidence.title,
-      description: evidence.description,
-      url: evidence.url,
-      uploadedAt: evidence.uploadedAt.toISOString(),
-      uploadedBy: evidence.uploadedBy
-    }});
+    res.json({
+      success: true, data: {
+        id: evidence.id,
+        milestoneId: evidence.milestoneId,
+        type: evidence.type,
+        title: evidence.title,
+        description: evidence.description,
+        url: evidence.url,
+        uploadedAt: evidence.uploadedAt.toISOString(),
+        uploadedBy: evidence.uploadedBy
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR' } });
   }
@@ -224,7 +230,7 @@ router.get('/:id/votes', async (req, res) => {
 router.get('/:id/voting-summary', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Get all votes
     const votes = await prisma.vote.findMany({
       where: { milestoneId: id }
@@ -246,19 +252,19 @@ router.get('/:id/voting-summary', async (req, res) => {
     });
 
     const totalVotingPower = members.reduce((sum, m) => sum + m.votingPower, 0);
-    
+
     const approveVotes = votes
       .filter(v => v.voteType === 'approve')
       .reduce((sum, v) => sum + (v.votingPower || 1), 0);
-      
+
     const rejectVotes = votes
       .filter(v => v.voteType === 'reject')
       .reduce((sum, v) => sum + (v.votingPower || 1), 0);
 
     const percentageApproved = totalVotingPower > 0 ? (approveVotes / totalVotingPower) * 100 : 0;
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       data: {
         totalVotingPower,
         approveVotes,
@@ -277,9 +283,9 @@ router.get('/:id/voting-summary', async (req, res) => {
 router.post('/:id/finalize-voting', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // In a real app, we would verify the threshold again here
-    
+
     const milestone = await prisma.milestone.update({
       where: { id },
       data: {

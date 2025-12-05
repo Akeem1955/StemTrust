@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, AlertCircle, Mail, CheckCircle, Plus, Trash2, Info, AlertTriangle, HelpCircle, Zap, Settings, Users, UserCheck, Shield } from 'lucide-react';
+import { X, AlertCircle, Mail, CheckCircle, Plus, Trash2, Info, AlertTriangle, HelpCircle, Zap, Settings, Users, UserCheck, Shield, Wallet } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -8,9 +8,11 @@ import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { toast } from 'sonner@2.0.3';
-import { onboardProject, getOrganizationMembers, OrganizationMember } from '../lib/api';
+import { toast } from 'sonner';
+import { api, OrganizationMember } from '../lib/api';
 import { MilestoneGuideDialog } from './MilestoneGuideDialog';
+import { useWallet } from './WalletProvider';
+import { BrowserWallet, MeshTxBuilder, KoiosProvider, Data } from '@meshsdk/core';
 
 interface OnboardProjectDialogProps {
   open: boolean;
@@ -30,35 +32,35 @@ type MilestoneMode = 'fixed' | 'custom';
 
 // Fixed 5-stage lifecycle template (standard for researchers)
 const FIXED_5_STAGE_TEMPLATE: Omit<MilestoneStage, 'id'>[] = [
-  { 
-    title: 'Research Planning & Setup', 
+  {
+    title: 'Research Planning & Setup',
     description: 'Design methodology and prepare research infrastructure',
-    fundingPercentage: 15, 
-    durationWeeks: 4 
+    fundingPercentage: 15,
+    durationWeeks: 4
   },
-  { 
-    title: 'Data Collection & Preliminary Analysis', 
+  {
+    title: 'Data Collection & Preliminary Analysis',
     description: 'Gather data and conduct initial analysis',
-    fundingPercentage: 20, 
-    durationWeeks: 8 
+    fundingPercentage: 20,
+    durationWeeks: 8
   },
-  { 
-    title: 'Core Research & Development', 
+  {
+    title: 'Core Research & Development',
     description: 'Main research activities and development work',
-    fundingPercentage: 30, 
-    durationWeeks: 12 
+    fundingPercentage: 30,
+    durationWeeks: 12
   },
-  { 
-    title: 'Testing & Validation', 
+  {
+    title: 'Testing & Validation',
     description: 'Validate findings and test solutions',
-    fundingPercentage: 20, 
-    durationWeeks: 6 
+    fundingPercentage: 20,
+    durationWeeks: 6
   },
-  { 
-    title: 'Documentation & Dissemination', 
+  {
+    title: 'Documentation & Dissemination',
     description: 'Finalize documentation and share results',
-    fundingPercentage: 15, 
-    durationWeeks: 4 
+    fundingPercentage: 15,
+    durationWeeks: 4
   },
 ];
 
@@ -75,11 +77,14 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
   const [milestoneMode, setMilestoneMode] = useState<MilestoneMode>('fixed');
   const [milestones, setMilestones] = useState<MilestoneStage[]>([]);
   const [showGuide, setShowGuide] = useState(false);
-  
+
   // Team member selection
   const [availableMembers, setAvailableMembers] = useState<OrganizationMember[]>([]);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+
+  // Wallet connection for signing lock transactions
+  const { connected, walletName } = useWallet();
 
   // Load organization members when dialog opens
   useEffect(() => {
@@ -91,7 +96,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
   const loadOrganizationMembers = async () => {
     try {
       setLoadingMembers(true);
-      const members = await getOrganizationMembers(organizationId);
+      const members = await api.getOrganizationMembers(organizationId);
       // Filter to only active members
       const activeMembers = members.filter(m => m.status === 'active');
       setAvailableMembers(activeMembers);
@@ -129,23 +134,23 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
   const isValidPercentage = totalPercentage === 100;
   const canAddMilestone = milestones.length < 10 && milestoneMode === 'custom';
   const canRemoveMilestone = milestones.length > 3 && milestoneMode === 'custom';
-  
+
   // Team member calculations
   const selectedMembers = availableMembers.filter(m => selectedMemberIds.includes(m.id));
   const totalVotingPower = selectedMembers.reduce((sum, m) => sum + m.votingPower, 0);
-  
+
   const toggleMemberSelection = (memberId: string) => {
-    setSelectedMemberIds(prev => 
-      prev.includes(memberId) 
+    setSelectedMemberIds(prev =>
+      prev.includes(memberId)
         ? prev.filter(id => id !== memberId)
         : [...prev, memberId]
     );
   };
-  
+
   const selectAllMembers = () => {
     setSelectedMemberIds(availableMembers.map(m => m.id));
   };
-  
+
   const deselectAllMembers = () => {
     setSelectedMemberIds([]);
   };
@@ -177,17 +182,17 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
       // Don't allow editing title or funding % in fixed mode
       return;
     }
-    setMilestones(milestones.map(m => 
+    setMilestones(milestones.map(m =>
       m.id === id ? { ...m, [field]: value } : m
     ));
   };
 
   const distributePercentagesEvenly = () => {
     if (milestoneMode === 'fixed') return;
-    
+
     const evenPercentage = Math.floor(100 / milestones.length);
     const remainder = 100 - (evenPercentage * milestones.length);
-    
+
     setMilestones(milestones.map((m, index) => ({
       ...m,
       fundingPercentage: evenPercentage + (index === 0 ? remainder : 0),
@@ -196,7 +201,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!researcherEmail.trim()) {
       toast.error('Please enter researcher email');
       return;
@@ -238,8 +243,75 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
         durationWeeks: m.durationWeeks,
       }));
 
+      let transactionHash: string | undefined;
+
+      // If wallet is connected, sign the lock transaction on frontend
+      if (connected && walletName) {
+        try {
+          toast.info('Building lock transaction...');
+
+          // Get script parameters from backend
+          const lockParams = await api.getLockTxParams();
+
+          // Initialize wallet and provider
+          const provider = new KoiosProvider('preprod');
+          const wallet = await BrowserWallet.enable(walletName);
+          const walletAddress = await wallet.getChangeAddress();
+
+          // Build datum for the lock transaction
+          const fundingAmount = parseFloat(totalFunding);
+          const datum: Data = {
+            alternative: 0,
+            fields: [
+              walletAddress, // organization hash (using address as placeholder)
+              walletAddress, // researcher hash (will be updated when researcher signs up)
+              [walletAddress], // member hashes
+              Math.floor(fundingAmount * 1_000_000), // totalFunds in lovelace
+              milestoneData.map(m => m.fundingPercentage), // milestone percentages
+              0 // current milestone (starting at 0)
+            ]
+          };
+
+          // Build the transaction
+          const txBuilder = new MeshTxBuilder({
+            fetcher: provider,
+            submitter: provider,
+          });
+
+          const assets = [
+            {
+              unit: "lovelace",
+              quantity: (fundingAmount * 1_000_000).toString(),
+            },
+          ];
+
+          await txBuilder
+            .txOut(lockParams.scriptAddress, assets)
+            .txOutInlineDatumValue(datum)
+            .changeAddress(walletAddress)
+            .selectUtxosFrom(await wallet.getUtxos())
+            .complete();
+
+          // Sign and submit the transaction
+          toast.info('Please sign the transaction in your wallet...');
+          const unsignedTx = txBuilder.txHex;
+          const signedTx = await wallet.signTx(unsignedTx);
+          transactionHash = await wallet.submitTx(signedTx);
+
+          toast.success(`Funds locked! Tx: ${transactionHash.slice(0, 20)}...`);
+        } catch (lockError: any) {
+          console.error('Lock transaction failed:', lockError);
+          toast.error(`Failed to lock funds: ${lockError.message || 'Unknown error'}`);
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        // No wallet connected - backend will handle locking (deprecated fallback)
+        toast.info('No wallet connected. Using server-side fund locking...');
+      }
+
       // Call the API to onboard project
-      const response = await onboardProject({
+      const response = await api.onboardProject({
         organizationId,
         campaignId: campaignId || undefined,
         researcherEmail,
@@ -250,6 +322,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
         milestoneMode,
         stagesCount: milestones.length,
         teamMemberIds: selectedMemberIds,
+        transactionHash, // Pass the frontend-signed transaction hash
       });
 
       if (response.emailSent) {
@@ -287,7 +360,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
       setCampaignId('');
       setMilestoneMode('fixed');
       setSelectedMemberIds(availableMembers.map(m => m.id)); // Reset to all selected
-      
+
       onClose();
     } catch (error) {
       toast.error('Failed to onboard project. Please try again.');
@@ -320,7 +393,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
             <Alert>
               <AlertCircle className="size-4" />
               <AlertDescription>
-                Onboard a specific research project. Choose between a <strong>fixed 5-stage lifecycle</strong> or <strong>3-10 custom stages</strong>. 
+                Onboard a specific research project. Choose between a <strong>fixed 5-stage lifecycle</strong> or <strong>3-10 custom stages</strong>.
                 The researcher will receive login instructions via email.
               </AlertDescription>
             </Alert>
@@ -328,7 +401,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
             {/* Basic Project Information */}
             <div className="space-y-4">
               <h3 className="font-medium">Project Information</h3>
-              
+
               <div>
                 <Label htmlFor="researcher-email">
                   Researcher Email Address <span className="text-red-500">*</span>
@@ -531,16 +604,14 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
                           type="button"
                           onClick={() => toggleMemberSelection(member.id)}
                           disabled={submitting}
-                          className={`p-3 rounded-lg border-2 text-left transition-all ${
-                            isSelected
-                              ? 'border-green-600 bg-green-50 shadow-sm'
-                              : 'border-gray-200 bg-white hover:border-green-300'
-                          }`}
+                          className={`p-3 rounded-lg border-2 text-left transition-all ${isSelected
+                            ? 'border-green-600 bg-green-50 shadow-sm'
+                            : 'border-gray-200 bg-white hover:border-green-300'
+                            }`}
                         >
                           <div className="flex items-start gap-3">
-                            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                              isSelected ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
-                            }`}>
+                            <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${isSelected ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'
+                              }`}>
                               {isSelected ? (
                                 <UserCheck className="w-5 h-5" />
                               ) : (
@@ -610,16 +681,14 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
                   type="button"
                   onClick={() => setMilestoneMode('fixed')}
                   disabled={submitting}
-                  className={`p-4 rounded-lg border-2 text-left transition-all ${
-                    milestoneMode === 'fixed'
-                      ? 'border-blue-600 bg-blue-50 shadow-md'
-                      : 'border-gray-200 bg-white hover:border-blue-300'
-                  }`}
+                  className={`p-4 rounded-lg border-2 text-left transition-all ${milestoneMode === 'fixed'
+                    ? 'border-blue-600 bg-blue-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-blue-300'
+                    }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg ${
-                      milestoneMode === 'fixed' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-                    }`}>
+                    <div className={`p-2 rounded-lg ${milestoneMode === 'fixed' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+                      }`}>
                       <Zap className="w-5 h-5" />
                     </div>
                     <div className="flex-1">
@@ -648,16 +717,14 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
                   type="button"
                   onClick={() => setMilestoneMode('custom')}
                   disabled={submitting}
-                  className={`p-4 rounded-lg border-2 text-left transition-all ${
-                    milestoneMode === 'custom'
-                      ? 'border-purple-600 bg-purple-50 shadow-md'
-                      : 'border-gray-200 bg-white hover:border-purple-300'
-                  }`}
+                  className={`p-4 rounded-lg border-2 text-left transition-all ${milestoneMode === 'custom'
+                    ? 'border-purple-600 bg-purple-50 shadow-md'
+                    : 'border-gray-200 bg-white hover:border-purple-300'
+                    }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-lg ${
-                      milestoneMode === 'custom' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600'
-                    }`}>
+                    <div className={`p-2 rounded-lg ${milestoneMode === 'custom' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-600'
+                      }`}>
                       <Settings className="w-5 h-5" />
                     </div>
                     <div className="flex-1">
@@ -692,7 +759,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
                     {milestoneMode === 'fixed' ? 'Fixed Milestone Stages' : 'Custom Milestone Stages'}
                   </h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    {milestoneMode === 'fixed' 
+                    {milestoneMode === 'fixed'
                       ? `Standard 5-stage lifecycle (descriptions and duration can be customized)`
                       : `Configure ${milestones.length} milestone stages (Min: 3, Max: 10)`
                     }
@@ -756,9 +823,8 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
                       {/* Header */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className={`flex-shrink-0 w-10 h-10 ${
-                            milestoneMode === 'fixed' ? 'bg-blue-600' : 'bg-green-600'
-                          } text-white rounded-full flex items-center justify-center font-medium`}>
+                          <div className={`flex-shrink-0 w-10 h-10 ${milestoneMode === 'fixed' ? 'bg-blue-600' : 'bg-green-600'
+                            } text-white rounded-full flex items-center justify-center font-medium`}>
                             {index + 1}
                           </div>
                           <div>

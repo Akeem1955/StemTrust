@@ -1,4 +1,4 @@
-import { MeshWallet, BlockfrostProvider, MeshTxBuilder, serializePlutusScript, mConStr0, stringToHex, deserializeAddress, list, integer } from '@meshsdk/core';
+import { MeshWallet, BlockfrostProvider, MeshTxBuilder, serializePlutusScript, mConStr0, stringToHex, deserializeAddress, list, integer, Data } from '@meshsdk/core';
 import { applyParamsToScript } from "@meshsdk/core-csl";
 import fs from 'fs';
 import path from 'path';
@@ -91,7 +91,7 @@ export function buildDatum(params: {
     researcher: string;
     members: string[];
     totalFunds: number;
-    milestones: { percentage: number }[];
+    milestones: number[];
     currentMilestone: number;
 }) {
     const {
@@ -103,15 +103,18 @@ export function buildDatum(params: {
         currentMilestone
     } = params;
 
-    // StemTrustDatum { ... } -> Constr 0 [Org, Res, Members, Total, Milestones, Current]
-    return mConStr0([
-        { bytes: organization },
-        { bytes: researcher },
-        list(members.map(m => ({ bytes: m }))) as any, // List of ByteArrays (strings)
-        integer(totalFunds) as any,
-        list(milestones.map(m => buildMilestone(m.percentage))) as any,
-        integer(currentMilestone) as any
-    ]);
+    const datum: Data = {
+        alternative: 0,
+        fields: [
+            organization,
+            researcher,
+            members,
+            totalFunds,
+            milestones,
+            currentMilestone
+        ],
+    };
+    return datum;
 }
 
 export async function lockFunds(
@@ -132,14 +135,14 @@ export async function lockFunds(
         researcher: researcherHash,
         members: members,
         totalFunds: totalFunds,
-        milestones: milestones,
+        milestones: milestones.map(m => m.percentage),
         currentMilestone: 0
     });
 
     const assets = [
         {
             unit: "lovelace",
-            quantity: totalFunds.toString(),
+            quantity: (totalFunds * 1_000_000).toString(), // Convert ADA to Lovelace
         },
     ];
 
@@ -157,6 +160,15 @@ export async function lockFunds(
 
     console.log(`Funds locked! Tx Hash: ${txHash}`);
     return txHash;
+}
+
+export async function releaseFunds(milestoneId: string, amount: number, recipientAddress: string) {
+    console.log(`[Mock Smart Contract] Releasing ${amount} ADA for milestone ${milestoneId} to ${recipientAddress}`);
+    // In a real implementation, this would:
+    // 1. Find the script UTXO
+    // 2. Construct a transaction with the correct redeemer (e.g. Approve)
+    // 3. Sign and submit
+    return "mock-tx-hash-release";
 }
 
 // Export wallet for other uses

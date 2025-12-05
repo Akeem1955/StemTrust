@@ -3,7 +3,7 @@ import { Clock, Mail, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Eye } fr
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { Project } from '../lib/mockData';
+import { Project } from '../lib/api';
 
 interface PendingProjectPreviewProps {
   project: Project;
@@ -38,28 +38,26 @@ export function PendingProjectPreview({ project }: PendingProjectPreviewProps) {
                 Awaiting Researcher
               </Badge>
             </div>
-            
+
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2 text-gray-700">
                 <Mail className="w-4 h-4" />
                 <span>
-                  Email sent to <strong>{project.researcher.email}</strong>
+                  Email sent to <strong>{project.researcherEmail}</strong>
                 </span>
               </div>
-              
-              {project.onboardingStatus?.sentAt && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Clock className="w-4 h-4" />
-                  <span>Sent on {formatDate(project.onboardingStatus.sentAt)}</span>
-                </div>
-              )}
+
+              <div className="flex items-center gap-2 text-gray-600">
+                <Clock className="w-4 h-4" />
+                <span>Created on {formatDate(project.createdAt)}</span>
+              </div>
 
               <div className="flex items-start gap-2 mt-3 p-3 bg-white rounded-lg border border-yellow-200">
                 <AlertCircle className="w-4 h-4 text-yellow-700 flex-shrink-0 mt-0.5" />
                 <div className="text-xs text-gray-700">
                   <p className="font-medium mb-1">Waiting for researcher to accept</p>
                   <p>
-                    The researcher will need to log in and complete their profile before the project becomes active. 
+                    The researcher will need to log in and complete their profile before the project becomes active.
                     Once accepted, they can start working on milestones.
                   </p>
                 </div>
@@ -109,7 +107,7 @@ export function PendingProjectPreview({ project }: PendingProjectPreviewProps) {
                   <p className="text-gray-600 mb-3">{project.description}</p>
                   <div className="flex items-center gap-4 text-sm">
                     <span className="text-gray-600">
-                      {project.researcher.name} • {project.researcher.institution}
+                      {project.researcherName} • {project.institution}
                     </span>
                   </div>
                 </div>
@@ -124,11 +122,11 @@ export function PendingProjectPreview({ project }: PendingProjectPreviewProps) {
                   Total: <span className="font-medium">{project.totalFunding.toLocaleString()} ADA</span>
                 </span>
                 <span className="text-gray-600">
-                  Backers: <span className="font-medium">{project.assignedMembers?.length || 0}</span>
+                  Backers: <span className="font-medium">{project.backers?.length || 0}</span>
                 </span>
               </div>
               <Badge variant="outline" className="bg-blue-100 text-blue-800">
-                Milestone 1/{project.milestones.length}
+                Milestone 1/{project.milestones?.length || 0}
               </Badge>
             </div>
 
@@ -136,22 +134,22 @@ export function PendingProjectPreview({ project }: PendingProjectPreviewProps) {
             <div className="pt-4 border-t">
               <h5 className="font-medium mb-3 text-sm">Project Milestones</h5>
               <div className="space-y-2">
-                {project.milestones.slice(0, 3).map((milestone, idx) => (
+                {project.milestones?.slice(0, 3).map((milestone, idx) => (
                   <div key={milestone.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded">
                     <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-xs text-gray-700 flex-shrink-0">
                       {idx + 1}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{milestone.name}</p>
+                      <p className="text-sm font-medium truncate">{milestone.title}</p>
                     </div>
                     <span className="text-xs text-gray-600 whitespace-nowrap">
                       {milestone.fundingAmount.toLocaleString()} ADA
                     </span>
                   </div>
                 ))}
-                {project.milestones.length > 3 && (
+                {(project.milestones?.length || 0) > 3 && (
                   <p className="text-xs text-gray-500 text-center py-1">
-                    +{project.milestones.length - 3} more milestones
+                    +{(project.milestones?.length || 0) - 3} more milestones
                   </p>
                 )}
               </div>
@@ -176,7 +174,7 @@ export function PendingProjectPreview({ project }: PendingProjectPreviewProps) {
 
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-800">
-              <strong>Note:</strong> This is a preview. The project will automatically activate once the researcher 
+              <strong>Note:</strong> This is a preview. The project will automatically activate once the researcher
               accepts the invitation and completes their profile setup.
             </p>
           </div>

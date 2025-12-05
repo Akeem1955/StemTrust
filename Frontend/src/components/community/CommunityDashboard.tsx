@@ -1,4 +1,4 @@
-import { TrendingUp, Sparkles, Award, Heart, Search, Bell, User, Wallet, ChevronRight, LogOut } from 'lucide-react';
+import { TrendingUp, Sparkles, Award, Heart, Search, Bell, User, Wallet, ChevronRight, LogOut, Building } from 'lucide-react';
 import type { User as UserType } from '../../App';
 
 interface CommunityDashboardProps {
@@ -325,6 +325,33 @@ export function CommunityDashboard({ user, walletAddress, walletBalance, onNavig
 
           {/* Right Column - Sidebar */}
           <div className="space-y-6">
+            {/* My Organizations */}
+            {user?.memberships && user.memberships.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Building className="w-5 h-5 text-blue-600" />
+                  <h3 className="text-gray-900">My Organizations</h3>
+                </div>
+                <div className="space-y-4">
+                  {user.memberships.map((membership) => (
+                    <div key={membership.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{membership.organizationName}</p>
+                        <p className="text-xs text-gray-500 capitalize">{membership.role}</p>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        membership.status === 'active' 
+                          ? 'bg-blue-100 text-blue-700' 
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {membership.status || 'Active'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Recommended Researchers */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h3 className="text-gray-900 mb-4">Recommended Researchers</h3>

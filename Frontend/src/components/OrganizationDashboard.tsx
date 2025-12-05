@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, LogOut, Briefcase, Users, TrendingUp, UserCog, UsersIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { User } from '../App';
-import { mockCampaigns, mockProjects } from '../lib/mockData';
+import { Project, api } from '../lib/api';
 import { ComingSoonDialog } from './ComingSoonDialog';
 import { CreateCampaignDialog } from './CreateCampaignDialog';
 import { OnboardProjectDialog } from './OnboardProjectDialog';
@@ -25,11 +25,36 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
   const [onboardProjectOpen, setOnboardProjectOpen] = useState(false);
   const [manageMembersProjectId, setManageMembersProjectId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const { connected, address, balance, network, connectWallet, disconnectWallet } = useWallet();
 
-  const organizationCampaigns = mockCampaigns.filter(c => c.organizationId === user.id);
-  const allOrgProjects = mockProjects.filter(p => p.sponsor?.id === user.id);
-  const pendingProjects = allOrgProjects.filter(p => p.status === 'pending-onboarding');
+  useEffect(() => {
+    async function loadData() {
+      if (user.organizationId) {
+        try {
+          const [projectsData, campaignsData] = await Promise.all([
+            api.getOrganizationProjects(user.organizationId),
+            api.getCampaigns(user.organizationId)
+          ]);
+          setProjects(projectsData);
+          setCampaigns(campaignsData);
+        } catch (e) {
+          console.error("Failed to load organization data", e);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [user.organizationId]);
+
+  const organizationCampaigns = campaigns;
+  const allOrgProjects = projects;
+  const pendingProjects = allOrgProjects.filter(p => p.status === 'pending_onboarding');
   const activeProjects = allOrgProjects.filter(p => p.status === 'active');
 
   return (
@@ -39,7 +64,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl">{user.name}</h1>
+              <h1 className="text-2xl">{user.organization || user.name}</h1>
               <p className="text-sm text-gray-600">Organization Dashboard</p>
             </div>
             <div className="flex items-center gap-3">
@@ -207,10 +232,15 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
                                 <div className="flex-1">
                                   <h4 className="text-xl mb-2">{project.title}</h4>
                                   <p className="text-gray-600 mb-3">{project.description}</p>
-                                  <div className="flex items-center gap-4 text-sm">
+                                  <div className="flex flex-col gap-1 text-sm">
                                     <span className="text-gray-600">
-                                      {project.researcher.name} • {project.researcher.institution}
+                                      {project.researcherName} • {project.institution}
                                     </span>
+                                    {project.researcherWalletAddress && (
+                                      <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded w-fit">
+                                        {project.researcherWalletAddress.slice(0, 12)}...{project.researcherWalletAddress.slice(-6)}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 <Badge>{project.category}</Badge>
@@ -230,7 +260,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
                                   }}
                                 >
                                   <UsersIcon className="mr-2 w-4 h-4" />
-                                  Manage Team ({project.assignedMembers?.length || 0})
+                                  Manage Team ({project.teamMembers?.length || 0})
                                 </Button>
                                 <div className="text-sm text-gray-600">
                                   Total: <span className="font-medium">{project.totalFunding.toLocaleString()} ADA</span>
@@ -263,10 +293,15 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
                               <div className="flex-1">
                                 <h3 className="text-xl mb-2">{project.title}</h3>
                                 <p className="text-gray-600 mb-3">{project.description}</p>
-                                <div className="flex items-center gap-4 text-sm">
+                                <div className="flex flex-col gap-1 text-sm">
                                   <span className="text-gray-600">
-                                    {project.researcher.name} • {project.researcher.institution}
+                                    {project.researcherName} • {project.institution}
                                   </span>
+                                  {/* {project.researcher.walletAddress && (
+                                    <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded w-fit">
+                                      {project.researcher.walletAddress.slice(0, 12)}...{project.researcher.walletAddress.slice(-6)}
+                                    </span>
+                                  )} */}
                                 </div>
                               </div>
                               <Badge>{project.category}</Badge>
@@ -277,7 +312,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
                                   Total: <span className="font-medium">{project.totalFunding.toLocaleString()} ADA</span>
                                 </span>
                                 <span className="text-gray-600">
-                                  Team: <span className="font-medium">{project.assignedMembers?.length || project.backers.length}</span>
+                                  Team: <span className="font-medium">{project.teamMembers?.length || 0}</span>
                                 </span>
                               </div>
                               <div className="flex items-center gap-3">
@@ -293,7 +328,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
                                   Team
                                 </Button>
                                 <Badge variant="outline">
-                                  Milestone {project.currentMilestone}/{project.milestones.length}
+                                  Milestone {(project.milestones?.filter(m => m.status === 'approved').length || 0) + 1}/{project.milestones?.length || 0}
                                 </Badge>
                               </div>
                             </div>
@@ -308,7 +343,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
           </TabsContent>
 
           <TabsContent value="members" className="mt-6">
-            <MemberManagement organizationId={user.id} />
+            <MemberManagement organizationId={user.organizationId || user.id} />
           </TabsContent>
         </Tabs>
       </div>
@@ -316,13 +351,13 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
       <CreateCampaignDialog
         open={createCampaignOpen}
         onClose={() => setCreateCampaignOpen(false)}
-        organizationId={user.id}
+        organizationId={user.organizationId || user.id}
       />
 
       <OnboardProjectDialog
         open={onboardProjectOpen}
         onClose={() => setOnboardProjectOpen(false)}
-        organizationId={user.id}
+        organizationId={user.organizationId || user.id}
       />
 
       {manageMembersProjectId && (
@@ -332,7 +367,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
           projectId={manageMembersProjectId}
           projectTitle={allOrgProjects.find(p => p.id === manageMembersProjectId)?.title || ''}
           organizationId={user.id}
-          currentMembers={allOrgProjects.find(p => p.id === manageMembersProjectId)?.assignedMembers || []}
+          currentMembers={allOrgProjects.find(p => p.id === manageMembersProjectId)?.teamMembers || []}
         />
       )}
     </div>

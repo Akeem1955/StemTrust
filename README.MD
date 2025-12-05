@@ -284,10 +284,7 @@ const lucid = await Lucid.new(
 
 This is a frontend-only implementation with mock data. To run:
 
-```bash
-# The app is already running in Figma Make environment
-# All components are functional with mock data
-```
+
 
 ## Security Considerations
 

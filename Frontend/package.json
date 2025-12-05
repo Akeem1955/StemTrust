@@ -3,6 +3,8 @@
       "version": "0.1.0",
       "private": true,
       "dependencies": {
+            "@meshsdk/core": "^1.9.0-beta.87",
+            "@meshsdk/core-csl": "^1.9.0-beta.87",
             "@radix-ui/react-accordion": "^1.2.3",
             "@radix-ui/react-alert-dialog": "^1.1.6",
             "@radix-ui/react-aspect-ratio": "^1.1.2",
@@ -37,6 +39,7 @@
             "input-otp": "^1.4.2",
             "lucide-react": "^0.487.0",
             "next-themes": "^0.4.6",
+            "nodemailer": "^7.0.11",
             "react": "^18.3.1",
             "react-day-picker": "^8.10.1",
             "react-dom": "^18.3.1",
@@ -49,9 +52,11 @@
       },
       "devDependencies": {
             "@types/node": "^20.10.0",
+            "@types/nodemailer": "^7.0.4",
             "@types/react": "^19.2.7",
             "@vitejs/plugin-react-swc": "^3.10.2",
-            "vite": "6.3.5"
+            "vite": "6.3.5",
+            "vite-plugin-node-polyfills": "^0.24.0"
       },
       "scripts": {
             "dev": "vite",

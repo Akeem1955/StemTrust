@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
 import { SubmitVoteRequest, SubmitVoteResponse } from '../types/api';
+import { releaseFunds } from '../services/smartContract';
 
 const router = Router();
 
@@ -8,7 +9,7 @@ const router = Router();
 router.post('/', async (req, res) => {
   try {
     const body: SubmitVoteRequest = req.body;
-    
+
     // 1. Validate Milestone Status
     const milestone = await prisma.milestone.findUnique({
       where: { id: body.milestoneId },
@@ -53,7 +54,7 @@ router.post('/', async (req, res) => {
         voteType: body.voteType,
         votingPower: member.votingPower,
         comment: body.comment,
-        transactionHash: 'tx-hash-vote' // Mock for now, or real if we had on-chain voting
+        transactionHash: body.signature || 'tx-hash-vote'
       }
     });
 
@@ -67,17 +68,58 @@ router.post('/', async (req, res) => {
     });
 
     const totalVotingPower = orgMembers.reduce((sum, m) => sum + m.votingPower, 0);
-    
+
     const approveVotes = allVotes
       .filter(v => v.voteType === 'approve')
       .reduce((sum, v) => sum + (v.votingPower || 0), 0);
-      
+
     const rejectVotes = allVotes
       .filter(v => v.voteType === 'reject')
       .reduce((sum, v) => sum + (v.votingPower || 0), 0);
 
     const percentageApproved = totalVotingPower > 0 ? (approveVotes / totalVotingPower) * 100 : 0;
     const hasReachedThreshold = percentageApproved >= 75; // Hardcoded threshold
+
+    if (hasReachedThreshold) {
+      // Update milestone status
+      await prisma.milestone.update({
+        where: { id: milestone.id },
+        data: {
+          status: 'approved',
+          approvedDate: new Date()
+        }
+      });
+
+      // Trigger Smart Contract Release
+      const project = await prisma.project.findUnique({
+        where: { id: milestone.projectId },
+        include: { researcher: true, milestones: { orderBy: { stageNumber: 'asc' } } }
+      });
+
+      if (project && project.researcher && project.researcher.walletAddress) {
+        try {
+          await releaseFunds(milestone.id, Number(milestone.fundingAmount), project.researcher.walletAddress);
+        } catch (e) {
+          console.error("Failed to release funds", e);
+        }
+      }
+
+      // Auto-activate the next milestone
+      if (project && project.milestones) {
+        const currentIndex = project.milestones.findIndex(m => m.id === milestone.id);
+        const nextMilestone = project.milestones[currentIndex + 1];
+
+        if (nextMilestone) {
+          await prisma.milestone.update({
+            where: { id: nextMilestone.id },
+            data: {
+              status: 'in_progress',
+              startDate: new Date()
+            }
+          });
+        }
+      }
+    }
 
     const response: SubmitVoteResponse = {
       success: true,
@@ -94,7 +136,7 @@ router.post('/', async (req, res) => {
       milestoneStatus: milestone.status as any,
       transactionHash: vote.transactionHash || undefined
     };
-    
+
     res.json({ success: true, data: response });
   } catch (error) {
     console.error(error);

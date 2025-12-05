@@ -11,7 +11,7 @@
 
 export type UserRole = 'organization' | 'researcher' | 'community';
 
-export type ProjectStatus = 
+export type ProjectStatus =
   | 'pending_onboarding'
   | 'active'
   | 'milestone_pending'
@@ -45,10 +45,16 @@ export interface AuthUser {
   id: string;
   email: string;
   role: UserRole;
+  name?: string;
+  organizationName?: string;
+  organizationId?: string;
+  researcherId?: string;
+  institution?: string;
   walletAddress?: string;
   walletProvider?: WalletProvider;
   createdAt: string;
   lastLoginAt?: string;
+  memberships?: { id: string; organizationId: string; organizationName: string; role: string; status?: string }[];
 }
 
 export interface SignInRequest {
@@ -66,6 +72,7 @@ export interface SignUpRequest {
   email: string;
   password: string;
   role: UserRole;
+  name?: string;
   organizationName?: string;
   researchInstitution?: string;
 }
@@ -125,6 +132,7 @@ export interface OrganizationMember {
 export interface AddMemberRequest {
   organizationId: string;
   email: string;
+  name?: string;
   votingPower?: number;
   role?: MemberRole;
 }
@@ -172,6 +180,7 @@ export interface Project {
   researcherName: string;
   researcherEmail: string;
   institution: string;
+  researcherWalletAddress?: string;
   totalFunding: number; // ADA
   fundingReleased: number; // ADA
   status: ProjectStatus;
@@ -184,6 +193,13 @@ export interface Project {
   teamMembers: ProjectTeamMember[];
   smartContractAddress?: string;
   transactionHash?: string;
+  backers?: Array<{
+    id: string;
+    name: string;
+    walletAddress: string;
+    amount: number;
+  }>;
+  currentMilestone?: number;
 }
 
 export interface ProjectTeamMember {
@@ -253,6 +269,7 @@ export interface Vote {
 export interface OnboardProjectRequest {
   organizationId: string;
   campaignId?: string;
+  researcherId?: string;
   researcherEmail: string;
   researcherName: string;
   institution: string;
@@ -270,6 +287,8 @@ export interface OnboardProjectRequest {
     fundingPercentage: number;
     durationWeeks: number;
   }>;
+  // Optional: If frontend signed the lock transaction, pass the hash here
+  transactionHash?: string;
 }
 
 export interface OnboardProjectResponse {
@@ -308,6 +327,8 @@ export interface SubmitVoteRequest {
   voteType: VoteType;
   votingPower: number;
   comment?: string;
+  signature?: string; // Hex encoded signature
+  walletAddress?: string; // Address used to sign
 }
 
 export interface SubmitVoteResponse {
@@ -324,6 +345,26 @@ export interface SubmitVoteResponse {
   };
   milestoneStatus?: MilestoneStatus;
   transactionHash?: string;
+  releaseData?: {
+    scriptCbor: string;
+    scriptAddr: string;
+    scriptUtxo: any;
+    voterHashes: string[];
+    datumParams: {
+      organizationHash: string;
+      researcherHash: string;
+      memberHashes: string[];
+      totalFunds: number;
+      milestones: number[];
+      currentMilestone: number;
+    };
+    redeemerParams: {
+      milestoneIndex: number;
+      voterHashes: string[];
+    };
+    paymentAmount: number;
+    researcherAddress: string;
+  };
 }
 
 export interface ClaimMilestoneRequest {
@@ -366,7 +407,12 @@ export interface OrganizationDashboardStats {
     status: string;
     count: number;
   }>;
-  recentProjects: Project[];
+  recentProjects: Array<{
+    id: string;
+    title: string;
+    status: ProjectStatus;
+    updatedAt: string;
+  }>;
 }
 
 export interface ResearcherDashboardStats {

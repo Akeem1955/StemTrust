@@ -316,10 +316,10 @@ export function MemberManagement({ organizationId }: MemberManagementProps) {
                     <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white">
                       {member.name
                         ? member.name
-                            .split(' ')
-                            .map(n => n[0])
-                            .join('')
-                            .toUpperCase()
+                          .split(' ')
+                          .map(n => n[0])
+                          .join('')
+                          .toUpperCase()
                         : member.email[0].toUpperCase()}
                     </div>
                     <div>
@@ -341,8 +341,8 @@ export function MemberManagement({ organizationId }: MemberManagementProps) {
                         member.status === 'active'
                           ? 'default'
                           : member.status === 'pending'
-                          ? 'secondary'
-                          : 'outline'
+                            ? 'secondary'
+                            : 'outline'
                       }
                     >
                       {member.status}
@@ -353,11 +353,11 @@ export function MemberManagement({ organizationId }: MemberManagementProps) {
                       Voting Power: {member.votingPower}
                     </span>
 
-                    <span className="text-sm text-gray-600">Joined: {member.joinedDate}</span>
+                    <span className="text-sm text-gray-600">Joined: {new Date(member.joinedAt).toLocaleDateString()}</span>
 
-                    {member.lastActive && (
+                    {/* {member.lastActive && (
                       <span className="text-sm text-gray-600">Last active: {member.lastActive}</span>
-                    )}
+                    )} */}
                   </div>
                 </div>
 

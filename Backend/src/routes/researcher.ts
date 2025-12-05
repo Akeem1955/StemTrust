@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { 
-  Researcher, 
-  ResearcherDashboardStats, 
-  Project, 
-  WalletBalance, 
+import {
+  Researcher,
+  ResearcherDashboardStats,
+  Project,
+  WalletBalance,
   FundingTransaction,
   WithdrawFundsRequest,
   WithdrawFundsResponse,
@@ -28,9 +28,9 @@ const formatResearcher = (res: any): Researcher => ({
   stats: {
     totalProjects: res.projects?.length || 0,
     activeProjects: res.projects?.filter((p: any) => p.status === 'active').length || 0,
-    completedMilestones: res.projects?.reduce((sum: number, p: any) => 
+    completedMilestones: res.projects?.reduce((sum: number, p: any) =>
       sum + (p.milestones?.filter((m: any) => m.status === 'completed').length || 0), 0) || 0,
-    totalFundingReceived: res.projects?.reduce((sum: number, p: any) => 
+    totalFundingReceived: res.projects?.reduce((sum: number, p: any) =>
       sum + Number(p.fundingReleased || 0), 0) || 0
   }
 });
@@ -66,7 +66,7 @@ router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    
+
     const researcher = await prisma.researcher.update({
       where: { id },
       data: {
@@ -95,7 +95,7 @@ router.patch('/:id', async (req, res) => {
 router.get('/:id/dashboard/stats', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const researcher = await prisma.researcher.findUnique({
       where: { id },
       include: {
@@ -114,10 +114,10 @@ router.get('/:id/dashboard/stats', async (req, res) => {
     const totalProjects = researcher.projects.length;
     const activeProjects = researcher.projects.filter(p => p.status === 'active').length;
     const totalFundingReceived = researcher.projects.reduce((sum, p) => sum + Number(p.fundingReleased || 0), 0);
-    
+
     let completedMilestones = 0;
     let pendingMilestones = 0;
-    
+
     researcher.projects.forEach(p => {
       completedMilestones += p.milestones.filter(m => m.status === 'completed').length;
       pendingMilestones += p.milestones.filter(m => m.status === 'pending' || m.status === 'in_progress').length;
@@ -136,7 +136,7 @@ router.get('/:id/dashboard/stats', async (req, res) => {
       fundingReceived: [], // TODO: Aggregate from transactions
       projectProgress: researcher.projects.map(p => ({
         projectId: p.id,
-        title: p.title,
+        projectName: p.title,
         progress: 0, // TODO: Calculate progress
         status: p.status as ProjectStatus
       })),
@@ -210,7 +210,7 @@ router.get('/:id/pending-milestones', async (req, res) => {
       include: {
         project: true
       },
-      orderBy: { updatedAt: 'desc' }
+      orderBy: { stageNumber: 'asc' }
     });
 
     const formattedMilestones = milestones.map(m => ({

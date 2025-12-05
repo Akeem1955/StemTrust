@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, LogOut, Rocket, CheckCircle, Clock } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { User } from '../App';
-import { mockProjects } from '../lib/mockData';
+import { Project, api } from '../lib/api';
 import { CreateProjectDialog } from './CreateProjectDialog';
 import { MilestoneQuickReference } from './MilestoneQuickReference';
 import { useWallet } from './WalletProvider';
+import { toast } from 'sonner';
 
 interface IndividualDashboardProps {
   user: User;
@@ -17,9 +18,38 @@ interface IndividualDashboardProps {
 
 export function IndividualDashboard({ user, onLogout, onViewProject }: IndividualDashboardProps) {
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   const { connected, address, balance, network, connectWallet, disconnectWallet } = useWallet();
 
-  const userProjects = mockProjects.filter(p => p.researcher.id === user.id);
+  useEffect(() => {
+    async function loadData() {
+      if (user.researcherId) {
+        try {
+          const researcherProjects = await api.getResearcherProjects(user.researcherId);
+          setProjects(researcherProjects);
+        } catch (e) {
+          console.error("Failed to load researcher projects", e);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [user.researcherId]);
+
+  // Update wallet address when connected
+  useEffect(() => {
+    if (connected && address && user.researcherId) {
+      api.updateResearcher(user.researcherId, { walletAddress: address })
+        .then(() => console.log("Researcher wallet updated"))
+        .catch(err => console.error("Failed to update wallet", err));
+    }
+  }, [connected, address, user.researcherId]);
+
+  const userProjects = projects;
   const activeProjects = userProjects.filter(p => p.status === 'active');
   const completedProjects = userProjects.filter(p => p.status === 'completed');
 
@@ -142,14 +172,14 @@ export function IndividualDashboard({ user, onLogout, onViewProject }: Individua
                     <div className="flex items-center justify-between text-sm mb-2">
                       <span className="text-gray-600">Progress</span>
                       <span className="font-medium">
-                        Milestone {project.currentMilestone}/{project.milestones.length}
+                        Milestone {(project.milestones?.filter(m => m.status === 'approved').length || 0) + 1}/{project.milestones?.length || 0}
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-green-600 h-2 rounded-full transition-all"
                         style={{
-                          width: `${(project.currentMilestone / project.milestones.length) * 100}%`
+                          width: `${((project.milestones?.filter(m => m.status === 'approved').length || 0) / (project.milestones?.length || 1)) * 100}%`
                         }}
                       />
                     </div>
@@ -161,12 +191,12 @@ export function IndividualDashboard({ user, onLogout, onViewProject }: Individua
                         Total Funding: <span className="font-medium">{project.totalFunding.toLocaleString()} ADA</span>
                       </span>
                       <span className="text-gray-600">
-                        Backers: <span className="font-medium">{project.backers.length}</span>
+                        Backers: <span className="font-medium">{project.backers?.length || 0}</span>
                       </span>
                     </div>
-                    {project.sponsor && (
+                    {project.organizationName && (
                       <span className="text-sm text-gray-600">
-                        Sponsored by {project.sponsor.name}
+                        Sponsored by {project.organizationName}
                       </span>
                     )}
                   </div>

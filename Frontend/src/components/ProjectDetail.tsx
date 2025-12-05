@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Clock, XCircle, Upload, Vote } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -7,7 +7,7 @@ import { Progress } from './ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Alert, AlertDescription } from './ui/alert';
 import { User } from '../App';
-import { mockProjects, Project, Milestone } from '../lib/mockData';
+import { Project, Milestone, api } from '../lib/api';
 import { SubmitEvidenceDialog } from './SubmitEvidenceDialog';
 import { VotingPanel } from './VotingPanel';
 import { PendingProjectPreview } from './PendingProjectPreview';
@@ -21,8 +21,26 @@ interface ProjectDetailProps {
 export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailProps) {
   const [evidenceDialogOpen, setEvidenceDialogOpen] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const project = mockProjects.find(p => p.id === projectId);
+  useEffect(() => {
+    async function loadProject() {
+      try {
+        const data = await api.getProject(projectId);
+        setProject(data);
+      } catch (e) {
+        console.error("Failed to load project", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadProject();
+  }, [projectId]);
+
+  if (loading) {
+    return <div className="container mx-auto px-4 py-8">Loading project details...</div>;
+  }
 
   if (!project) {
     return (
@@ -34,7 +52,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
   }
 
   // If project is pending onboarding, show pending view for organizations
-  if (project.status === 'pending-onboarding' && currentUser?.role === 'organization') {
+  if (project.status === 'pending_onboarding' && currentUser?.role === 'organization') {
     return (
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white border-b">
@@ -55,9 +73,12 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
     );
   }
 
-  const isResearcher = currentUser?.id === project.researcher.id;
-  const isBacker = project.backers.some(b => b.id === currentUser?.id) || 
-                    project.assignedMembers?.some(m => m.email === currentUser?.email);
+  const isResearcher = currentUser?.researcherId === project.researcherId;
+  const isOrganization = currentUser?.role === 'organization';
+  const isProjectOrganization = isOrganization && currentUser?.organizationId === project.organizationId;
+  const isBacker = project.backers?.some(b => b.id === currentUser?.id) ||
+    project.teamMembers?.some(m => m.email === currentUser?.email) ||
+    isProjectOrganization;
 
   const completedMilestones = project.milestones.filter(m => m.status === 'approved').length;
   const progressPercentage = (completedMilestones / project.milestones.length) * 100;
@@ -73,7 +94,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
         return 'text-green-600';
       case 'voting':
         return 'text-blue-600';
-      case 'in-progress':
+      case 'in_progress':
         return 'text-yellow-600';
       case 'rejected':
         return 'text-red-600';
@@ -88,7 +109,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
         return <CheckCircle className="size-5" />;
       case 'voting':
         return <Vote className="size-5" />;
-      case 'in-progress':
+      case 'in_progress':
         return <Clock className="size-5" />;
       case 'rejected':
         return <XCircle className="size-5" />;
@@ -133,7 +154,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
             </Card>
             <Card className="p-4">
               <p className="text-sm text-gray-600 mb-1">Backers</p>
-              <p className="text-2xl">{project.backers.length}</p>
+              <p className="text-2xl">{project.backers?.length || 0}</p>
             </Card>
             <Card className="p-4">
               <p className="text-sm text-gray-600 mb-1">Current Milestone</p>
@@ -160,10 +181,10 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
           <h3 className="mb-4">Researcher Information</h3>
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{project.researcher.name}</p>
-              <p className="text-sm text-gray-600">{project.researcher.institution}</p>
+              <p className="font-medium">{project.researcherName}</p>
+              <p className="text-sm text-gray-600">{project.institution}</p>
               <p className="text-xs text-gray-500 font-mono mt-1">
-                {project.researcher.walletAddress}
+                {project.researcherWalletAddress}
               </p>
             </div>
             {isResearcher && (
@@ -182,7 +203,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
 
           <TabsContent value="milestones" className="mt-6">
             <div className="space-y-6">
-              {project.milestones.map((milestone, index) => (
+              {project.milestones.map((milestone) => (
                 <Card key={milestone.id} className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-4 flex-1">
@@ -192,13 +213,13 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="text-xl">
-                            Stage {milestone.stageNumber}: {milestone.name}
+                            Stage {milestone.stageNumber}: {milestone.title}
                           </h3>
                           <Badge variant={
                             milestone.status === 'approved' ? 'default' :
-                            milestone.status === 'voting' ? 'secondary' :
-                            milestone.status === 'in-progress' ? 'outline' :
-                            'destructive'
+                              milestone.status === 'voting' ? 'secondary' :
+                                milestone.status === 'in_progress' ? 'outline' :
+                                  'destructive'
                           }>
                             {milestone.status}
                           </Badge>
@@ -207,9 +228,9 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
                         <p className="text-sm">
                           Funding: <span className="font-medium">{milestone.fundingAmount.toLocaleString()} ADA</span>
                         </p>
-                        {milestone.completedDate && (
+                        {milestone.approvedDate && (
                           <p className="text-sm text-gray-600 mt-1">
-                            Completed: {milestone.completedDate}
+                            Completed: {new Date(milestone.approvedDate).toLocaleDateString()}
                           </p>
                         )}
                       </div>
@@ -252,32 +273,32 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
                       <div className="flex items-center justify-between mb-3">
                         <h4>Community Vote</h4>
                         <p className="text-sm text-gray-600">
-                          {milestone.votesFor + milestone.votesAgainst} of {milestone.totalVoters} votes
+                          {(milestone.votingSummary?.approveVotes || 0) + (milestone.votingSummary?.rejectVotes || 0)} votes cast
                         </p>
                       </div>
                       <div className="space-y-2 mb-3">
                         <div className="flex items-center justify-between text-sm">
                           <span>Approve</span>
                           <span className="font-medium">
-                            {milestone.votesFor} ({((milestone.votesFor / milestone.totalVoters) * 100).toFixed(0)}%)
+                            {milestone.votingSummary?.approveVotes || 0} ({milestone.votingSummary?.percentageApproved || 0}%)
                           </span>
                         </div>
-                        <Progress 
-                          value={(milestone.votesFor / milestone.totalVoters) * 100} 
+                        <Progress
+                          value={milestone.votingSummary?.percentageApproved || 0}
                           className="h-2"
                         />
                         <div className="flex items-center justify-between text-sm">
                           <span>Reject</span>
                           <span className="font-medium">
-                            {milestone.votesAgainst} ({((milestone.votesAgainst / milestone.totalVoters) * 100).toFixed(0)}%)
+                            {milestone.votingSummary?.rejectVotes || 0}
                           </span>
                         </div>
-                        <Progress 
-                          value={(milestone.votesAgainst / milestone.totalVoters) * 100} 
+                        <Progress
+                          value={(milestone.votingSummary?.rejectVotes || 0) / (milestone.votingSummary?.totalVotingPower || 1) * 100}
                           className="h-2 [&>div]:bg-red-600"
                         />
                       </div>
-                      {((milestone.votesFor / milestone.totalVoters) * 100) >= 75 ? (
+                      {(milestone.votingSummary?.percentageApproved || 0) >= 75 ? (
                         <Alert className="bg-green-50 border-green-200">
                           <CheckCircle className="size-4 text-green-600" />
                           <AlertDescription className="text-green-700">
@@ -286,7 +307,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
                         </Alert>
                       ) : (
                         <p className="text-sm text-gray-600">
-                          Need 75% approval to unlock funds ({((75 - (milestone.votesFor / milestone.totalVoters) * 100).toFixed(0))}% more needed)
+                          Need 75% approval to unlock funds ({Math.max(0, 75 - (milestone.votingSummary?.percentageApproved || 0)).toFixed(0)}% more needed)
                         </p>
                       )}
                     </div>
@@ -294,7 +315,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
 
                   {/* Actions */}
                   <div className="flex gap-3 mt-4">
-                    {isResearcher && milestone.status === 'in-progress' && (
+                    {isResearcher && (milestone.status === 'in_progress' || milestone.status === 'pending') && (
                       <Button onClick={() => handleSubmitEvidence(milestone)}>
                         <Upload className="mr-2 size-4" />
                         Submit Evidence
@@ -310,7 +331,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
             <Card className="p-6">
               <h3 className="mb-4">Project Backers</h3>
               <div className="space-y-3">
-                {project.backers.map(backer => (
+                {project.backers?.map(backer => (
                   <div key={backer.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                     <div>
                       <p className="font-medium">{backer.name}</p>
@@ -326,6 +347,9 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
                     </div>
                   </div>
                 ))}
+                {(!project.backers || project.backers.length === 0) && (
+                  <p className="text-center text-gray-500 py-4">No backers yet.</p>
+                )}
               </div>
             </Card>
           </TabsContent>
@@ -335,6 +359,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
               project={project}
               currentUser={currentUser}
               isBacker={isBacker}
+              isResearcher={isResearcher}
             />
           </TabsContent>
         </Tabs>

@@ -1,504 +1,249 @@
-// Mock API configuration
-// Replace these URLs with your real backend endpoints when ready
-const API_BASE_URL = 'http://localhost:3001/api';
-const MOCK_DELAY = 800; // Simulate network delay
-
-// Helper to simulate API delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Mock API response helper
-async function mockApiCall<T>(data: T, shouldSucceed = true): Promise<T> {
-  await delay(MOCK_DELAY);
-  if (!shouldSucceed) {
-    throw new Error('API call failed');
-  }
-  return data;
-}
-
-// Helper to try real API first, then fallback to mock
-async function fetchWithFallback<T>(
-  endpoint: string, 
-  options: RequestInit = {}, 
-  fallbackFn: () => Promise<T> | T
-): Promise<T> {
-  try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    });
-    
-    if (!response.ok) {
-      throw new Error(`API call failed: ${response.status} ${response.statusText}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.warn(`API call to ${endpoint} failed, falling back to mock data:`, error);
-    return fallbackFn();
-  }
-}
+// API Client for ScienceTrust Nigeria
 
 // ============================================
-// MEMBER MANAGEMENT API
+// API CONFIGURATION
 // ============================================
 
-export interface OrganizationMember {
+const API_BASE_URL = "http://localhost:3001/api";
+
+// ============================================
+// TYPES (Mirrored from Backend)
+// ============================================
+
+export type UserRole = 'organization' | 'researcher' | 'community';
+
+export type ProjectStatus =
+  | 'pending_onboarding'
+  | 'active'
+  | 'milestone_pending'
+  | 'milestone_approved'
+  | 'milestone_rejected'
+  | 'completed'
+  | 'cancelled';
+
+export type MilestoneStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'submitted'
+  | 'voting'
+  | 'approved'
+  | 'rejected'
+  | 'released';
+
+export type VoteType = 'approve' | 'reject';
+export type MemberStatus = 'active' | 'pending' | 'inactive';
+export type MemberRole = 'admin' | 'member' | 'viewer';
+export type WalletProvider = 'nami' | 'eternl' | 'flint' | 'yoroi' | 'lace';
+
+export interface AuthUser {
   id: string;
   email: string;
+  role: UserRole;
   name?: string;
-  votingPower: number; // 1 = normal, higher = more weight
-  status: 'active' | 'pending' | 'inactive';
-  joinedDate: string;
-  lastActive?: string;
-  role: 'admin' | 'member' | 'viewer';
+  organizationName?: string;
+  organizationId?: string;
+  researcherId?: string;
+  institution?: string;
+  walletAddress?: string;
+  walletProvider?: WalletProvider;
+  createdAt: string;
+  lastLoginAt?: string;
+  memberships?: { id: string; organizationId: string; organizationName: string; role: string; status?: string }[];
 }
 
-export interface AddMemberRequest {
+export interface SignInResponse {
+  user: AuthUser;
+  token: string;
+  expiresIn: number;
+}
+
+export interface SignUpResponse {
+  user: AuthUser;
+  token: string;
+  message: string;
+}
+
+export interface Project {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
   organizationId: string;
+  organizationName: string;
+  researcherId: string;
+  researcherName: string;
+  researcherEmail: string;
+  institution: string;
+  researcherWalletAddress?: string;
+  totalFunding: number;
+  fundingReleased: number;
+  status: ProjectStatus;
+  createdAt: string;
+  updatedAt: string;
+  milestones: Milestone[];
+  teamMembers: ProjectTeamMember[];
+  smartContractAddress?: string;
+  transactionHash?: string;
+  backers?: Array<{
+    id: string;
+    name: string;
+    walletAddress: string;
+    amount: number;
+  }>;
+  currentMilestone?: number;
+}
+
+export interface ProjectTeamMember {
+  id: string;
+  name: string;
   email: string;
-  votingPower?: number;
-  role?: 'admin' | 'member' | 'viewer';
+  votingPower: number;
+  role: MemberRole;
+  status: MemberStatus;
 }
 
-export interface UpdateMemberRequest {
+export interface Milestone {
+  id: string;
+  projectId: string;
+  stageNumber: number;
+  title: string;
+  description: string;
+  fundingAmount: number;
+  fundingPercentage: number;
+  durationWeeks: number;
+  status: MilestoneStatus;
+  startDate?: string;
+  endDate?: string;
+  submittedDate?: string;
+  approvedDate?: string;
+  evidence: Evidence[];
+  votes: Vote[];
+  votingSummary?: {
+    totalVotingPower: number;
+    approveVotes: number;
+    rejectVotes: number;
+    percentageApproved: number;
+    thresholdRequired: number; // 75%
+    hasReachedThreshold: boolean;
+  };
+}
+
+export interface Evidence {
+  id: string;
+  milestoneId: string;
+  type: 'image' | 'document' | 'link' | 'app';
+  title: string;
+  description: string;
+  url: string;
+  uploadedAt: string;
+  uploadedBy: string;
+}
+
+export interface Vote {
+  id: string;
+  milestoneId: string;
+  projectId: string;
   memberId: string;
-  votingPower?: number;
-  role?: 'admin' | 'member' | 'viewer';
-  status?: 'active' | 'pending' | 'inactive';
+  memberName: string;
+  voteType: VoteType;
+  votingPower: number;
+  comment?: string;
+  createdAt: string;
 }
 
-// Mock data for testing
-let mockMembers: OrganizationMember[] = [
-  {
-    id: 'member-1',
-    email: 'john.doe@example.com',
-    name: 'John Doe',
-    votingPower: 3,
-    status: 'active',
-    joinedDate: '2024-01-15',
-    lastActive: '2024-11-28',
-    role: 'member',
-  },
-  {
-    id: 'member-2',
-    email: 'jane.smith@example.com',
-    name: 'Jane Smith',
-    votingPower: 5,
-    status: 'active',
-    joinedDate: '2024-02-01',
-    lastActive: '2024-11-27',
-    role: 'admin',
-  },
-  {
-    id: 'member-3',
-    email: 'bob.wilson@example.com',
-    name: 'Bob Wilson',
-    votingPower: 1,
-    status: 'pending',
-    joinedDate: '2024-11-20',
-    role: 'viewer',
-  },
-  {
-    id: 'member-4',
-    email: 'sarah.okafor@unilag.edu.ng',
-    name: 'Dr. Sarah Okafor',
-    votingPower: 5,
-    status: 'active',
-    joinedDate: '2024-03-10',
-    lastActive: '2024-11-29',
-    role: 'admin',
-  },
-  {
-    id: 'member-5',
-    email: 'james.adebayo@gmail.com',
-    name: 'James Adebayo',
-    votingPower: 2,
-    status: 'active',
-    joinedDate: '2024-04-15',
-    lastActive: '2024-11-28',
-    role: 'member',
-  },
-  {
-    id: 'member-6',
-    email: 'grace.okeke@example.com',
-    name: 'Grace Okeke',
-    votingPower: 4,
-    status: 'active',
-    joinedDate: '2024-05-20',
-    lastActive: '2024-11-29',
-    role: 'member',
-  },
-  {
-    id: 'member-7',
-    email: 'david.nwosu@example.com',
-    name: 'David Nwosu',
-    votingPower: 2,
-    status: 'active',
-    joinedDate: '2024-06-01',
-    lastActive: '2024-11-27',
-    role: 'member',
-  },
-  {
-    id: 'member-8',
-    email: 'mary.eze@example.com',
-    name: 'Mary Eze',
-    votingPower: 3,
-    status: 'active',
-    joinedDate: '2024-07-10',
-    lastActive: '2024-11-29',
-    role: 'member',
-  },
-  {
-    id: 'member-9',
-    email: 'ahmed.bello@example.com',
-    votingPower: 1,
-    status: 'pending',
-    joinedDate: '2024-11-25',
-    role: 'viewer',
-  },
-  {
-    id: 'member-10',
-    email: 'chioma.nnadi@example.com',
-    name: 'Chioma Nnadi',
-    votingPower: 2,
-    status: 'active',
-    joinedDate: '2024-08-15',
-    lastActive: '2024-11-28',
-    role: 'viewer',
-  },
-];
-
-/**
- * Get all members for an organization
- */
-export async function getOrganizationMembers(organizationId: string): Promise<OrganizationMember[]> {
-  return fetchWithFallback(
-    `/organizations/${organizationId}/members`,
-    { method: 'GET' },
-    () => {
-      console.log(`[Mock API] GET ${API_BASE_URL}/organizations/${organizationId}/members`);
-      return mockApiCall(mockMembers);
-    }
-  );
+export interface OrganizationDashboardStats {
+  overview: {
+    totalProjects: number;
+    activeProjects: number;
+    totalFundingCommitted: number;
+    totalFundingReleased: number;
+    pendingApprovals: number;
+  };
+  recentProjects: Project[];
 }
 
-/**
- * Add a new member to an organization
- */
-export async function addOrganizationMember(request: AddMemberRequest): Promise<OrganizationMember> {
-  return fetchWithFallback(
-    `/organizations/${request.organizationId}/members`,
-    { 
-      method: 'POST',
-      body: JSON.stringify(request)
-    },
-    () => {
-      console.log(`[Mock API] POST ${API_BASE_URL}/organizations/${request.organizationId}/members`, request);
-      
-      const newMember: OrganizationMember = {
-        id: `member-${Date.now()}`,
-        email: request.email,
-        votingPower: request.votingPower || 1,
-        status: 'pending',
-        joinedDate: new Date().toISOString().split('T')[0],
-        role: request.role || 'viewer',
-      };
-      
-      mockMembers.push(newMember);
-      return mockApiCall(newMember);
-    }
-  );
+export interface ResearcherDashboardStats {
+  overview: {
+    totalProjects: number;
+    activeProjects: number;
+    completedMilestones: number;
+    totalFundingReceived: number;
+    pendingMilestones: number;
+    walletBalance: number;
+  };
+  projectProgress: Array<{
+    projectId: string;
+    projectName: string;
+    progress: number;
+  }>;
 }
-
-/**
- * Update a member's settings
- */
-export async function updateOrganizationMember(request: UpdateMemberRequest): Promise<OrganizationMember> {
-  return fetchWithFallback(
-    `/members/${request.memberId}`,
-    { 
-      method: 'PATCH',
-      body: JSON.stringify(request)
-    },
-    () => {
-      console.log(`[Mock API] PATCH ${API_BASE_URL}/members/${request.memberId}`, request);
-      
-      const memberIndex = mockMembers.findIndex(m => m.id === request.memberId);
-      if (memberIndex === -1) {
-        throw new Error('Member not found');
-      }
-      
-      mockMembers[memberIndex] = {
-        ...mockMembers[memberIndex],
-        ...(request.votingPower !== undefined && { votingPower: request.votingPower }),
-        ...(request.role !== undefined && { role: request.role }),
-        ...(request.status !== undefined && { status: request.status }),
-      };
-      
-      return mockApiCall(mockMembers[memberIndex]);
-    }
-  );
-}
-
-/**
- * Remove a member from an organization
- */
-export async function removeOrganizationMember(memberId: string): Promise<void> {
-  return fetchWithFallback(
-    `/members/${memberId}`,
-    { method: 'DELETE' },
-    () => {
-      console.log(`[Mock API] DELETE ${API_BASE_URL}/members/${memberId}`);
-      mockMembers = mockMembers.filter(m => m.id !== memberId);
-      return mockApiCall(undefined);
-    }
-  );
-}
-
-// ============================================
-// PROJECT ONBOARDING API
-// ============================================
 
 export interface OnboardProjectRequest {
   organizationId: string;
   campaignId?: string;
+  researcherId?: string;
   researcherEmail: string;
   projectTitle: string;
   projectDescription: string;
+  category?: string;
   totalFunding: number;
-  milestones: Array<{
-    title: string;
-    description: string;
-    fundingAmount: number;
-    durationWeeks: number;
-  }>;
-  teamMemberIds?: string[]; // Selected team members to monitor this project
-  milestoneMode?: 'fixed' | 'custom';
-  stagesCount?: number;
+  milestones: any[];
+  milestoneMode: 'fixed' | 'custom';
+  stagesCount: number;
+  teamMemberIds: string[];
+  researcherName?: string;
+  institution?: string;
+  // Optional: If frontend signed the lock transaction
+  transactionHash?: string;
+}
+
+export interface LockTxParams {
+  scriptAddress: string;
+  scriptCbor: string;
+  datumStructure: {
+    fields: string[];
+  };
 }
 
 export interface OnboardProjectResponse {
   projectId: string;
-  status: 'success' | 'pending';
+  status: string;
   message: string;
   emailSent: boolean;
   researcherEmail: string;
+  smartContractAddress?: string;
+  transactionHash?: string;
 }
 
-/**
- * Onboard a new project and send login instructions to researcher
- */
-export async function onboardProject(request: OnboardProjectRequest): Promise<OnboardProjectResponse> {
-  return fetchWithFallback(
-    `/projects/onboard`,
-    { 
-      method: 'POST',
-      body: JSON.stringify(request)
-    },
-    () => {
-      console.log(`[Mock API] POST ${API_BASE_URL}/projects/onboard`, request);
-      console.log(`[Mock API] Sending login instructions to ${request.researcherEmail}`);
-      
-      const response: OnboardProjectResponse = {
-        projectId: `proj-${Date.now()}`,
-        status: 'success',
-        message: `Project "${request.projectTitle}" has been onboarded successfully. Login instructions sent to ${request.researcherEmail}`,
-        emailSent: true,
-        researcherEmail: request.researcherEmail,
-      };
-      
-      return mockApiCall(response);
-    }
-  );
-}
-
-// ============================================
-// CAMPAIGN API
-// ============================================
-
-export interface CreateCampaignRequest {
-  organizationId: string;
-  title: string;
-  description: string;
-  totalBudget: number;
-  stagesCount: number;
-  category?: string;
-  startDate?: string;
-  endDate?: string;
-}
-
-export interface CreateCampaignResponse {
-  campaignId: string;
-  status: 'success' | 'pending';
-  message: string;
-}
-
-/**
- * Create a new campaign
- */
-export async function createCampaign(request: CreateCampaignRequest): Promise<CreateCampaignResponse> {
-  return fetchWithFallback(
-    `/campaigns`,
-    { 
-      method: 'POST',
-      body: JSON.stringify(request)
-    },
-    () => {
-      console.log(`[Mock API] POST ${API_BASE_URL}/campaigns`, request);
-      
-      const response: CreateCampaignResponse = {
-        campaignId: `campaign-${Date.now()}`,
-        status: 'success',
-        message: `Campaign "${request.title}" created successfully`,
-      };
-      
-      return mockApiCall(response);
-    }
-  );
-}
-
-// ============================================
-// PROJECT MEMBER MANAGEMENT API
-// ============================================
-
-export interface ProjectMember {
+export interface OrganizationMember {
   id: string;
+  organizationId: string;
+  userId: string;
   name: string;
   email: string;
+  role: MemberRole;
+  status: MemberStatus;
   votingPower: number;
-  role: 'admin' | 'member' | 'viewer';
-  status: 'active' | 'pending';
+  joinedAt: string;
 }
 
-export interface AddProjectMemberRequest {
-  projectId: string;
-  name: string;
-  email: string;
-  votingPower?: number;
-  role?: 'admin' | 'member' | 'viewer';
+export interface SubmitEvidenceResponse {
+  success: boolean;
+  milestoneId: string;
+  evidenceCount: number;
+  message: string;
+  milestoneStatus: MilestoneStatus;
 }
-
-export interface UpdateProjectMemberRequest {
-  projectId: string;
-  memberId: string;
-  votingPower?: number;
-  role?: 'admin' | 'member' | 'viewer';
-  status?: 'active' | 'pending';
-}
-
-// Mock data for project members
-let mockProjectMembers: Record<string, ProjectMember[]> = {};
-
-/**
- * Get all members for a specific project
- */
-export async function getProjectMembers(projectId: string): Promise<ProjectMember[]> {
-  return fetchWithFallback(
-    `/projects/${projectId}/members`,
-    { method: 'GET' },
-    () => {
-      console.log(`[Mock API] GET ${API_BASE_URL}/projects/${projectId}/members`);
-      return mockApiCall(mockProjectMembers[projectId] || []);
-    }
-  );
-}
-
-/**
- * Add a new member to a project
- */
-export async function addProjectMember(request: AddProjectMemberRequest): Promise<ProjectMember> {
-  return fetchWithFallback(
-    `/projects/${request.projectId}/members`,
-    { 
-      method: 'POST',
-      body: JSON.stringify(request)
-    },
-    () => {
-      console.log(`[Mock API] POST ${API_BASE_URL}/projects/${request.projectId}/members`, request);
-      
-      const newMember: ProjectMember = {
-        id: `pm-${Date.now()}`,
-        name: request.name,
-        email: request.email,
-        votingPower: request.votingPower || 1,
-        role: request.role || 'member',
-        status: 'active',
-      };
-      
-      if (!mockProjectMembers[request.projectId]) {
-        mockProjectMembers[request.projectId] = [];
-      }
-      mockProjectMembers[request.projectId].push(newMember);
-      
-      return mockApiCall(newMember);
-    }
-  );
-}
-
-/**
- * Update a project member's settings
- */
-export async function updateProjectMember(request: UpdateProjectMemberRequest): Promise<ProjectMember> {
-  return fetchWithFallback(
-    `/projects/${request.projectId}/members/${request.memberId}`,
-    { 
-      method: 'PATCH',
-      body: JSON.stringify(request)
-    },
-    () => {
-      console.log(`[Mock API] PATCH ${API_BASE_URL}/projects/${request.projectId}/members/${request.memberId}`, request);
-      
-      const members = mockProjectMembers[request.projectId] || [];
-      const memberIndex = members.findIndex(m => m.id === request.memberId);
-      
-      if (memberIndex === -1) {
-        throw new Error('Member not found');
-      }
-      
-      members[memberIndex] = {
-        ...members[memberIndex],
-        ...(request.votingPower !== undefined && { votingPower: request.votingPower }),
-        ...(request.role !== undefined && { role: request.role }),
-        ...(request.status !== undefined && { status: request.status }),
-      };
-      
-      return mockApiCall(members[memberIndex]);
-    }
-  );
-}
-
-/**
- * Remove a member from a project
- */
-export async function removeProjectMember(projectId: string, memberId: string): Promise<void> {
-  return fetchWithFallback(
-    `/projects/${projectId}/members/${memberId}`,
-    { method: 'DELETE' },
-    () => {
-      console.log(`[Mock API] DELETE ${API_BASE_URL}/projects/${projectId}/members/${memberId}`);
-      
-      if (mockProjectMembers[projectId]) {
-        mockProjectMembers[projectId] = mockProjectMembers[projectId].filter(m => m.id !== memberId);
-      }
-      
-      return mockApiCall(undefined);
-    }
-  );
-}
-
-// ============================================
-// VOTING API
-// ============================================
 
 export interface SubmitVoteRequest {
-  memberId: string;
-  projectId: string;
   milestoneId: string;
-  vote: 'approve' | 'reject';
+  projectId: string;
+  memberId: string;
+  voteType: VoteType;
   votingPower: number;
+  comment?: string;
+  signature?: string;
+  walletAddress?: string;
 }
 
 export interface SubmitVoteResponse {
@@ -506,30 +251,212 @@ export interface SubmitVoteResponse {
   voteId: string;
   weightedVote: number;
   message: string;
+  votingSummary: {
+    totalVotingPower: number;
+    approveVotes: number;
+    rejectVotes: number;
+    percentageApproved: number;
+    hasReachedThreshold: boolean;
+  };
+  milestoneStatus: MilestoneStatus;
+  transactionHash?: string;
+  releaseData?: any;
 }
 
-/**
- * Submit a vote for a milestone (considers voting power)
- */
-export async function submitVote(request: SubmitVoteRequest): Promise<SubmitVoteResponse> {
-  return fetchWithFallback(
-    `/votes`,
-    { 
-      method: 'POST',
-      body: JSON.stringify(request)
-    },
-    () => {
-      console.log(`[Mock API] POST ${API_BASE_URL}/votes`, request);
-      console.log(`[Mock API] Vote weight: ${request.votingPower}`);
-      
-      const response: SubmitVoteResponse = {
-        success: true,
-        voteId: `vote-${Date.now()}`,
-        weightedVote: request.votingPower,
-        message: `Your vote (weight: ${request.votingPower}) has been recorded successfully`,
-      };
-      
-      return mockApiCall(response);
+// ============================================
+// API CLIENT
+// ============================================
+
+class ApiClient {
+  private token: string | null = null;
+
+  constructor() {
+    this.token = localStorage.getItem('auth_token');
+  }
+
+  setToken(token: string) {
+    this.token = token;
+    localStorage.setItem('auth_token', token);
+  }
+
+  clearToken() {
+    this.token = null;
+    localStorage.removeItem('auth_token');
+  }
+
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    if (this.token) {
+      // @ts-ignore
+      headers['Authorization'] = `Bearer ${this.token}`;
     }
-  );
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || data.message || 'API request failed');
+    }
+
+    return data.data || data; // Handle { success: true, data: ... } or direct response
+  }
+
+  // AUTH
+  async signIn(credentials: any) {
+    return this.request<SignInResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+  }
+
+  async signUp(data: any) {
+    return this.request<SignUpResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMe() {
+    return this.request<AuthUser>('/auth/me');
+  }
+
+  // PROJECTS
+  async getProject(id: string) {
+    return this.request<Project>(`/projects/${id}`);
+  }
+
+  async createProject(data: OnboardProjectRequest) {
+    return this.request<OnboardProjectResponse>('/projects/onboard', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getLockTxParams() {
+    return this.request<LockTxParams>('/projects/lock-tx-params');
+  }
+
+  async onboardProject(data: OnboardProjectRequest) {
+    return this.request<OnboardProjectResponse>('/projects/onboard', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // DASHBOARD
+  async getOrgDashboard() {
+    return this.request<Project[]>('/projects');
+  }
+
+  async getResearcherDashboard() {
+    return this.request<Project[]>('/projects');
+  }
+
+  async getOrganizationProjects(organizationId: string) {
+    return this.request<Project[]>(`/organizations/${organizationId}/projects`);
+  }
+
+  async getResearcherProjects(researcherId: string) {
+    return this.request<Project[]>(`/researchers/${researcherId}/projects`);
+  }
+
+  async updateResearcher(id: string, data: any) {
+    return this.request<any>(`/researchers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  }
+
+  // CAMPAIGNS (Mocked for now as backend doesn't support it yet)
+  async getCampaigns(organizationId?: string) {
+    // Return empty array or mock data to prevent errors
+    return [];
+  }
+  // PROJECT ONBOARDING
+  async onboardProject(data: OnboardProjectRequest) {
+    return this.request<OnboardProjectResponse>('/projects/onboard', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async getOrganizationMembers(organizationId: string) {
+    return this.request<OrganizationMember[]>(`/organizations/${organizationId}/members`);
+  }
+
+  async addOrganizationMember(data: any) {
+    return this.request<OrganizationMember>(`/organizations/${data.organizationId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateOrganizationMember(data: { memberId: string; votingPower?: number; role?: string }) {
+    return this.request<OrganizationMember>(`/members/${data.memberId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async removeOrganizationMember(memberId: string) {
+    return this.request<void>(`/members/${memberId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // MILESTONES & EVIDENCE
+  async submitEvidence(milestoneId: string, evidence: any[]) {
+    return this.request<SubmitEvidenceResponse>(`/milestones/${milestoneId}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ evidence })
+    });
+  }
+
+  async getMilestoneEvidence(milestoneId: string) {
+    return this.request<Evidence[]>(`/milestones/${milestoneId}/evidence`);
+  }
+
+  // VOTING
+  async submitVote(data: SubmitVoteRequest) {
+    return this.request<SubmitVoteResponse>('/votes', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async getMilestoneVotes(milestoneId: string) {
+    return this.request<any[]>(`/milestones/${milestoneId}/votes`);
+  }
+
+  async getVotingSummary(milestoneId: string) {
+    return this.request<any>(`/milestones/${milestoneId}/voting-summary`);
+  }
 }
+
+export const api = new ApiClient();
+
+// Helper functions for backward compatibility or direct usage
+export const getOrganizationProjects = (id: string) => api.getOrganizationProjects(id);
+export const getResearcherProjects = (id: string) => api.getResearcherProjects(id);
+export const updateResearcher = (id: string, data: any) => api.updateResearcher(id, data);
+export const getCampaigns = (orgId?: string) => api.getCampaigns(orgId);
+export const login = (creds: any) => api.signIn(creds);
+export const signup = (data: any) => api.signUp(data);
+export const getProject = (id: string) => api.getProject(id);
+export const onboardProject = (data: OnboardProjectRequest) => api.onboardProject(data);
+export const getOrganizationMembers = (id: string) => api.getOrganizationMembers(id);
+export const addOrganizationMember = (data: any) => api.addOrganizationMember(data);
+export const updateOrganizationMember = (data: any) => api.updateOrganizationMember(data);
+export const removeOrganizationMember = (id: string) => api.removeOrganizationMember(id);
+export const submitEvidence = (id: string, evidence: any[]) => api.submitEvidence(id, evidence);
+export const submitVote = (data: SubmitVoteRequest) => api.submitVote(data);
+export const getMilestoneVotes = (id: string) => api.getMilestoneVotes(id);
+export const getVotingSummary = (id: string) => api.getVotingSummary(id);

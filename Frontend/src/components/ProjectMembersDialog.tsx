@@ -7,8 +7,8 @@ import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
-import { toast } from 'sonner@2.0.3';
-import { ProjectMember } from '../lib/mockData';
+import { toast } from 'sonner';
+import { ProjectTeamMember } from '../lib/api';
 
 interface ProjectMembersDialogProps {
   open: boolean;
@@ -16,7 +16,7 @@ interface ProjectMembersDialogProps {
   projectId: string;
   projectTitle: string;
   organizationId: string;
-  currentMembers?: ProjectMember[];
+  currentMembers?: ProjectTeamMember[];
 }
 
 export function ProjectMembersDialog({
@@ -27,7 +27,7 @@ export function ProjectMembersDialog({
   organizationId,
   currentMembers = []
 }: ProjectMembersDialogProps) {
-  const [members, setMembers] = useState<ProjectMember[]>(currentMembers);
+  const [members, setMembers] = useState<ProjectTeamMember[]>(currentMembers);
   const [addingMember, setAddingMember] = useState(false);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberName, setNewMemberName] = useState('');
@@ -61,7 +61,7 @@ export function ProjectMembersDialog({
       setAddingMember(true);
 
       // Simulate API call
-      const newMember: ProjectMember = {
+      const newMember: ProjectTeamMember = {
         id: `pm-${Date.now()}`,
         name: newMemberName,
         email: newMemberEmail,
@@ -75,7 +75,7 @@ export function ProjectMembersDialog({
       setNewMemberName('');
       setNewMemberVotingPower(1);
       setNewMemberRole('member');
-      
+
       toast.success(`${newMemberName} added to project team`);
     } catch (error) {
       toast.error('Failed to add member');
@@ -205,7 +205,7 @@ export function ProjectMembersDialog({
             <h4 className="font-medium mb-3">
               Team Members ({members.length})
             </h4>
-            
+
             {members.length === 0 ? (
               <Card className="p-8 text-center">
                 <Users className="size-12 text-gray-300 mx-auto mb-3" />

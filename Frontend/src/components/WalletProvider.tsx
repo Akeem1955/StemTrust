@@ -66,6 +66,8 @@ interface WalletContextType {
   availableWallets: { name: string; icon: string; key: string }[];
   isLoading: boolean;
   error: string | null;
+  signData: (payload: string) => Promise<string>;
+  walletName: string | null;
 }
 
 const WalletContext = createContext<WalletContextType | null>(null);
@@ -95,6 +97,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [availableWallets, setAvailableWallets] = useState<{ name: string; icon: string; key: string }[]>([]);
   const [walletAPI, setWalletAPI] = useState<any>(null);
+  const [selectedWalletName, setSelectedWalletName] = useState<string | null>(null);
 
   // Wallet configurations
   const walletConfigs = [
@@ -164,6 +167,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // Enable the wallet
       const api = await walletExtension.enable();
       setWalletAPI(api);
+      setSelectedWalletName(walletKey);
 
       // Get wallet address
       const addresses = await api.getUsedAddresses();
@@ -221,6 +225,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signData = async (payload: string): Promise<string> => {
+    if (!walletAPI || !address) {
+      throw new Error('Wallet not connected');
+    }
+    try {
+      // Convert payload to hex
+      const encoder = new TextEncoder();
+      const data = encoder.encode(payload);
+      const payloadHex = Array.from(data)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      const signatureObj = await walletAPI.signData(address, payloadHex);
+      // CIP-30 returns { signature: cbor<COSE_Sign1>, key: cbor<COSE_Key> }
+      // We return the signature part
+      return signatureObj.signature;
+    } catch (err) {
+      console.error('Sign data error:', err);
+      throw err;
+    }
+  };
+
   const disconnectWallet = () => {
     setConnected(false);
     setAddress(null);
@@ -241,7 +267,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         disconnectWallet,
         availableWallets,
         isLoading,
-        error
+        error,
+        signData,
+        walletName: selectedWalletName
       }}
     >
       {children}

@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { useWallet } from './WalletProvider';
 import { InstallWalletGuide } from './InstallWalletGuide';
+import { api } from '../lib/api';
 
 interface SignInFormProps {
   userType: 'organization' | 'individual' | 'community';
@@ -38,49 +39,26 @@ export function SignInForm({ userType, onSuccess, onSwitchToSignUp }: SignInForm
         throw new Error('Please connect your Cardano wallet first');
       }
 
-      // In production: Call backend API to verify credentials
-      // const response = await fetch('/api/auth/signin', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ email, password, walletAddress: address, userType })
-      // });
+      // Call backend API
+      const response = await api.signIn({ email, password });
 
-      // Mock successful signin
-      setTimeout(() => {
-        let mockUser;
-        
-        if (userType === 'community') {
-          mockUser = {
-            id: `community-${Date.now()}`,
-            name: 'Community Member',
-            email: email,
-            type: userType,
-            walletAddress: address
-          };
-        } else if (userType === 'organization') {
-          mockUser = {
-            id: 'org-1',
-            name: 'Nigerian Research Foundation',
-            email: email,
-            type: userType,
-            walletAddress: address
-          };
-        } else {
-          mockUser = {
-            id: 'ind-1',
-            name: 'Dr. Amaka Okonkwo',
-            email: email,
-            type: userType,
-            walletAddress: address
-          };
-        }
+      // Store token
+      api.setToken(response.token);
 
-        onSuccess(mockUser);
-        setLoading(false);
-      }, 1500);
+      // Enhance user object with wallet address and type for frontend compatibility
+      const userData = {
+        ...response.user,
+        type: userType, // Maintain the selected user type context
+        walletAddress: address, // Ensure current wallet is linked
+        // Map backend fields to frontend expected fields if necessary
+        organization: response.user.organizationName || response.user.organizationId
+      };
+
+      onSuccess(userData);
+      setLoading(false);
 
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to sign in');
       setLoading(false);
     }
   };

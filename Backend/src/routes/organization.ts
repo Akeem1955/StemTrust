@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { 
-  Organization, 
-  OrganizationMember, 
-  AddMemberRequest, 
+import {
+  Organization,
+  OrganizationMember,
+  AddMemberRequest,
   OrganizationDashboardStats,
   Project,
   ProjectStatus
 } from '../types/api';
+import { sendEmail } from '../services/email';
 
 const router = Router();
 
@@ -58,7 +59,7 @@ router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    
+
     const org = await prisma.organization.update({
       where: { id },
       data: {
@@ -111,6 +112,21 @@ router.post('/:id/members', async (req, res) => {
     const { id } = req.params;
     const body: AddMemberRequest = req.body;
 
+    // Check if member already exists in this org
+    const existingMember = await prisma.organizationMember.findFirst({
+      where: {
+        organizationId: id,
+        email: body.email
+      }
+    });
+
+    if (existingMember) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'MEMBER_EXISTS', message: 'Member already exists in this organization' }
+      });
+    }
+
     const member = await prisma.organizationMember.create({
       data: {
         organizationId: id,
@@ -122,8 +138,42 @@ router.post('/:id/members', async (req, res) => {
       }
     });
 
+    // Fetch Organization Name for the email
+    const org = await prisma.organization.findUnique({
+      where: { id },
+      select: { name: true }
+    });
+
+    // Send Invitation Email
+    const loginUrl = 'http://localhost:3000/auth'; // Adjust for production
+    const emailSubject = `Invitation to join ${org?.name || 'StemTrust Organization'}`;
+    const emailBody = `
+      Hello,
+
+      You have been invited to join ${org?.name || 'an organization'} on StemTrust as a ${body.role}.
+
+      To accept this invitation and start voting on research projects:
+      1. Go to ${loginUrl}
+      2. Select "Sign Up"
+      3. IMPORTANT: Choose "Community Member" as your account type.
+      4. Use this email address: ${body.email}
+      
+      Once logged in, you will automatically have access to the organization's dashboard and voting rights.
+      
+      Your voting power is set to: ${body.votingPower}.
+
+      Welcome to the team!
+      
+      Best regards,
+      StemTrust Team
+    `;
+
+    // Send email asynchronously (don't block response)
+    sendEmail(body.email, emailSubject, emailBody).catch(err => console.error('Failed to send invite email:', err));
+
     res.json({ success: true, data: member });
   } catch (error) {
+    console.error('Add member error:', error);
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR' } });
   }
 });
@@ -132,7 +182,7 @@ router.post('/:id/members', async (req, res) => {
 router.get('/:id/dashboard/stats', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const org = await prisma.organization.findUnique({
       where: { id },
       include: {
@@ -152,7 +202,7 @@ router.get('/:id/dashboard/stats', async (req, res) => {
     const activeProjects = org.projects.filter(p => p.status === 'active').length;
     const totalFundingCommitted = org.projects.reduce((sum, p) => sum + Number(p.totalFunding || 0), 0);
     const totalFundingReleased = org.projects.reduce((sum, p) => sum + Number(p.fundingReleased || 0), 0);
-    
+
     // Calculate pending approvals (milestones in 'voting' status)
     let pendingApprovals = 0;
     org.projects.forEach(p => {
@@ -198,10 +248,19 @@ router.get('/:id/dashboard/stats', async (req, res) => {
 router.get('/:id/projects', async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Fetch org name for the response
+    const org = await prisma.organization.findUnique({
+      where: { id },
+      select: { name: true }
+    });
+
     const projects = await prisma.project.findMany({
       where: { organizationId: id },
       include: {
-        researcher: true,
+        researcher: {
+          include: { user: true }
+        },
         milestones: true
       },
       orderBy: { updatedAt: 'desc' }
@@ -213,10 +272,10 @@ router.get('/:id/projects', async (req, res) => {
       description: p.description || '',
       category: p.category || '',
       organizationId: p.organizationId || '',
-      organizationName: 'Nigerian Research Foundation', // Could fetch org name
+      organizationName: org?.name || '',
       researcherId: p.researcherId || '',
       researcherName: p.researcher?.name || '',
-      researcherEmail: '', // Need to fetch user email if needed
+      researcherEmail: p.researcher?.user?.email || '',
       institution: p.researcher?.institution || '',
       totalFunding: Number(p.totalFunding),
       fundingReleased: Number(p.fundingReleased),
@@ -244,7 +303,7 @@ router.get('/:id/projects', async (req, res) => {
 router.get('/:id/pending-approvals', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Find milestones that are in 'voting' status for projects belonging to this org
     const milestones = await prisma.milestone.findMany({
       where: {
@@ -269,7 +328,7 @@ router.get('/:id/pending-approvals', async (req, res) => {
       projectTitle: m.project.title,
       amount: Number(m.fundingAmount),
       requester: m.project.researcher?.name || 'Unknown Researcher',
-      date: m.updatedAt.toISOString(),
+      date: (m.submittedDate || new Date()).toISOString(),
       status: 'pending',
       votes: {
         yes: 0, // TODO: Implement voting logic
@@ -290,7 +349,7 @@ router.get('/:id/pending-approvals', async (req, res) => {
 router.get('/:id/analytics/funding', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Aggregate funding by category
     const projects = await prisma.project.findMany({
       where: { organizationId: id },
@@ -301,7 +360,7 @@ router.get('/:id/analytics/funding', async (req, res) => {
     });
 
     const distribution: Record<string, number> = {};
-    
+
     projects.forEach(p => {
       const category = p.category || 'Uncategorized';
       const amount = Number(p.totalFunding);
@@ -323,7 +382,7 @@ router.get('/:id/analytics/funding', async (req, res) => {
 router.get('/:id/analytics/projects', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Group projects by creation month
     // Note: This is a simple JS aggregation. For large datasets, use raw SQL date_trunc
     const projects = await prisma.project.findMany({
@@ -332,7 +391,7 @@ router.get('/:id/analytics/projects', async (req, res) => {
     });
 
     const monthlyCounts: Record<string, number> = {};
-    
+
     projects.forEach(p => {
       const month = p.createdAt.toLocaleString('default', { month: 'short' });
       monthlyCounts[month] = (monthlyCounts[month] || 0) + 1;
@@ -354,7 +413,7 @@ router.get('/:id/analytics/projects', async (req, res) => {
 router.get('/:id/analytics/milestones', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const milestones = await prisma.milestone.findMany({
       where: {
         project: {
@@ -365,9 +424,9 @@ router.get('/:id/analytics/milestones', async (req, res) => {
     });
 
     const statusCounts: Record<string, number> = {};
-    
+
     milestones.forEach(m => {
-      const status = m.status;
+      const status = m.status || 'unknown';
       statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
 

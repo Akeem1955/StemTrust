@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { AuthPage } from './components/AuthPage';
 import { OrganizationDashboard } from './components/OrganizationDashboard';
@@ -24,9 +24,12 @@ export interface User {
   role?: 'organization' | 'individual' | 'community';
   walletAddress?: string;
   organization?: string;
+  organizationId?: string; // Added organizationId
+  researcherId?: string; // Added researcherId
   institution?: string;
   location?: string;
   interests?: string; // For community members
+  memberships?: { id: string; organizationId: string; organizationName: string; role: string; status?: string }[];
 }
 
 type ViewType = 'landing' | 'auth' | 'dashboard' | 'project' | 'community-dashboard' | 'discovery' | 'community-profile' | 'community-project-detail' | 'my-projects';
