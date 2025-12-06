@@ -13,6 +13,7 @@ import { CommunityProjectDetail } from './components/community/CommunityProjectD
 import { MyProjects } from './components/community/MyProjects';
 import { SupportConfirmationModal } from './components/community/SupportConfirmationModal';
 import { Toaster } from './components/ui/sonner';
+import { api } from './lib/api';
 
 export type UserType = 'organization' | 'individual' | 'community' | null;
 
@@ -44,6 +45,11 @@ export default function App() {
   const [supportConfirmationOpen, setSupportConfirmationOpen] = useState(false);
   const [selectedSupportProject, setSelectedSupportProject] = useState<any>(null);
   const [supportedProjects, setSupportedProjects] = useState<any[]>([]);
+  // const [isLoading, setIsLoading] = useState(true); // Removed unused state
+
+  // Session persistence removed as requested
+  // useEffect(() => { ...restoreSession... }, []);
+  // useEffect(() => { ...saveSession... }, [currentUser, currentView]);
 
   const handleLoginClick = (userType: UserType) => {
     setAuthType(userType);
@@ -72,6 +78,13 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    // Clear localStorage
+    // Clear localStorage (cleanup only)
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentView');
+    localStorage.removeItem('auth_token');
+    api.clearToken();
+
     setCurrentUser(null);
     setCurrentView('landing');
     setSelectedProjectId(null);

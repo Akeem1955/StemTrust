@@ -100,6 +100,8 @@ export interface ProjectTeamMember {
   votingPower: number;
   role: MemberRole;
   status: MemberStatus;
+  walletAddress?: string;
+  walletProvider?: WalletProvider;
 }
 
 export interface Milestone {
@@ -271,17 +273,18 @@ class ApiClient {
   private token: string | null = null;
 
   constructor() {
-    this.token = localStorage.getItem('auth_token');
+    // Session persistence removed
+    // this.token = localStorage.getItem('auth_token');
   }
 
   setToken(token: string) {
     this.token = token;
-    localStorage.setItem('auth_token', token);
+    // localStorage.setItem('auth_token', token);
   }
 
   clearToken() {
     this.token = null;
-    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_token'); // Just to be safe/cleanup
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -351,6 +354,77 @@ class ApiClient {
     });
   }
 
+  // Get parameters for building unlock transaction
+  async getUnlockTxParams(projectId: string, milestoneId: string) {
+    return this.request<{
+      scriptAddress: string;
+      scriptCbor: string;
+      projectTxHash: string;
+      milestoneIndex: number;
+      releaseAmount: number;
+      researcherWallet: string;
+      datumParams: {
+        organization: string;
+        researcher: string;
+        members: string[];
+        totalFunds: number;
+        milestones: number[];
+        currentMilestone: number;
+      };
+      isLastMilestone: boolean;
+      scriptUtxos?: any[];
+    }>(`/projects/${projectId}/milestones/${milestoneId}/unlock-tx-params`);
+  }
+
+  // Build unsigned unlock transaction on backend (avoids CORS issues)
+  async buildUnlockTx(projectId: string, milestoneId: string, walletAddress: string, walletUtxos: any[]) {
+    return this.request<{
+      unsignedTx: string;
+      txHash: string;
+    }>(`/projects/${projectId}/milestones/${milestoneId}/build-unlock-tx`, {
+      method: 'POST',
+      body: JSON.stringify({ walletAddress, walletUtxos })
+    });
+  }
+
+  // Release funds using backend wallet (no frontend wallet needed!)
+  async releaseFundsBackend(projectId: string, milestoneId: string) {
+    return this.request<{
+      milestoneId: string;
+      status: string;
+      transactionHash: string;
+      amountReleased: number;
+      recipientAddress: string;
+      message: string;
+    }>(`/projects/${projectId}/milestones/${milestoneId}/release-funds`, {
+      method: 'POST'
+    });
+  }
+
+  // Confirm fund release after blockchain transaction
+  async confirmFundRelease(projectId: string, milestoneId: string, transactionHash: string) {
+    return this.request<{
+      milestoneId: string;
+      status: string;
+      transactionHash: string;
+      amountReleased: number;
+      message: string;
+    }>(`/projects/${projectId}/milestones/${milestoneId}/confirm-release`, {
+      method: 'POST',
+      body: JSON.stringify({ transactionHash }),
+    });
+  }
+
+  // Get deposit address for organizations to send funds
+  async getDepositAddress() {
+    return this.request<{
+      depositAddress: string;
+      network: string;
+      currentBalance: number;
+      instructions: string;
+    }>('/projects/deposit-address');
+  }
+
   // DASHBOARD
   async getOrgDashboard() {
     return this.request<Project[]>('/projects');
@@ -380,13 +454,6 @@ class ApiClient {
     // Return empty array or mock data to prevent errors
     return [];
   }
-  // PROJECT ONBOARDING
-  async onboardProject(data: OnboardProjectRequest) {
-    return this.request<OnboardProjectResponse>('/projects/onboard', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
 
   async getOrganizationMembers(organizationId: string) {
     return this.request<OrganizationMember[]>(`/organizations/${organizationId}/members`);
@@ -413,10 +480,10 @@ class ApiClient {
   }
 
   // MILESTONES & EVIDENCE
-  async submitEvidence(milestoneId: string, evidence: any[]) {
+  async submitEvidence(milestoneId: string, evidence: any[], walletAddress?: string) {
     return this.request<SubmitEvidenceResponse>(`/milestones/${milestoneId}/submit`, {
       method: 'POST',
-      body: JSON.stringify({ evidence })
+      body: JSON.stringify({ evidence, walletAddress })
     });
   }
 
@@ -456,7 +523,7 @@ export const getOrganizationMembers = (id: string) => api.getOrganizationMembers
 export const addOrganizationMember = (data: any) => api.addOrganizationMember(data);
 export const updateOrganizationMember = (data: any) => api.updateOrganizationMember(data);
 export const removeOrganizationMember = (id: string) => api.removeOrganizationMember(id);
-export const submitEvidence = (id: string, evidence: any[]) => api.submitEvidence(id, evidence);
+export const submitEvidence = (id: string, evidence: any[], walletAddress?: string) => api.submitEvidence(id, evidence, walletAddress);
 export const submitVote = (data: SubmitVoteRequest) => api.submitVote(data);
 export const getMilestoneVotes = (id: string) => api.getMilestoneVotes(id);
 export const getVotingSummary = (id: string) => api.getVotingSummary(id);

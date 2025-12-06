@@ -98,22 +98,63 @@ router.post('/:id/submit', async (req, res) => {
 
     // Validate that evidence was provided
     const evidenceList = body?.evidence || [];
+    const researcherWalletAddress = (req.body as any).walletAddress;
 
-    // 1. Create Evidence records
+    // Get milestone with project and researcher info
+    const milestone = await prisma.milestone.findUnique({
+      where: { id },
+      include: {
+        project: {
+          include: { researcher: true }
+        }
+      }
+    });
+
+    if (!milestone) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Milestone not found' } });
+    }
+
+    // Validate and update researcher wallet address if provided
+    if (researcherWalletAddress) {
+      // Validate wallet address format - must be bech32 (addr_test1... or addr1...)
+      if (!researcherWalletAddress.startsWith('addr')) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_ADDRESS',
+            message: 'Invalid wallet address format. Must start with addr_test1 or addr1'
+          }
+        });
+      }
+
+      if (milestone.project.researcher) {
+        await prisma.researcher.update({
+          where: { id: milestone.project.researcher.id },
+          data: { walletAddress: researcherWalletAddress }
+        });
+        console.log(`[Evidence] Wallet updated for researcher ${milestone.project.researcher.id}`);
+      }
+    }
+
+    // 2. Create Evidence records (now storing file data directly in DB)
     if (evidenceList.length > 0) {
       await prisma.evidence.createMany({
-        data: evidenceList.map(e => ({
+        data: evidenceList.map((e: any) => ({
           milestoneId: id,
           type: e.type,
           title: e.title,
           description: e.description,
-          url: e.url,
+          url: e.url || null,
+          fileName: e.fileName || null,
+          fileData: e.fileData || null,
+          mimeType: e.mimeType || null,
           uploadedBy: null // TODO: Get actual user ID from auth context
         }))
       });
+      console.log(`[Evidence] Created ${evidenceList.length} evidence records for milestone ${id}`);
     }
 
-    // 2. Update Milestone Status to 'voting' (signifying it's submitted for review)
+    // 3. Update Milestone Status to 'voting' (signifying it's submitted for review)
     await prisma.milestone.update({
       where: { id },
       data: {
@@ -127,7 +168,8 @@ router.post('/:id/submit', async (req, res) => {
       milestoneId: id,
       evidenceCount: evidenceList.length,
       message: 'Evidence submitted successfully',
-      milestoneStatus: 'voting'
+      milestoneStatus: 'voting',
+      walletCaptured: !!researcherWalletAddress
     } as SubmitEvidenceResponse);
   } catch (error) {
     console.error('Error submitting evidence:', error);

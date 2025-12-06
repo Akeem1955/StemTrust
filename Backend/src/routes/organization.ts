@@ -178,6 +178,74 @@ router.post('/:id/members', async (req, res) => {
   }
 });
 
+// PATCH /api/organizations/:orgId/members/:memberId/wallet
+// Connect wallet to a member for multi-sig voting
+router.patch('/:orgId/members/:memberId/wallet', async (req, res) => {
+  try {
+    const { orgId, memberId } = req.params;
+    const { walletAddress, walletProvider, signature } = req.body;
+
+    if (!walletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Wallet address is required' }
+      });
+    }
+
+    // VALIDATE WALLET ADDRESS - must be bech32 format (addr_test1... or addr1...)
+    if (!walletAddress.startsWith('addr')) {
+      console.log(`[Wallet Connect] ❌ REJECTED invalid wallet format: ${walletAddress}`);
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_WALLET_FORMAT',
+          message: 'Wallet address must be in bech32 format (start with addr_test1 or addr1). The hex format from wallet is not valid.'
+        }
+      });
+    }
+
+    // Verify member belongs to this org
+    const member = await prisma.organizationMember.findFirst({
+      where: { id: memberId, organizationId: orgId }
+    });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Member not found in this organization' }
+      });
+    }
+
+    // TODO: Verify signature to prove wallet ownership
+    // For now, just update the wallet address
+
+    const updatedMember = await prisma.organizationMember.update({
+      where: { id: memberId },
+      data: {
+        walletAddress,
+        walletProvider: walletProvider || null
+      }
+    });
+
+    console.log(`[Wallet Connect] Member ${memberId} connected wallet: ${walletAddress}`);
+
+    res.json({
+      success: true,
+      data: {
+        id: updatedMember.id,
+        email: updatedMember.email,
+        name: updatedMember.name,
+        walletAddress: updatedMember.walletAddress,
+        walletProvider: updatedMember.walletProvider,
+        message: 'Wallet connected successfully'
+      }
+    });
+  } catch (error) {
+    console.error('Connect wallet error:', error);
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR' } });
+  }
+});
+
 // GET /api/organizations/:id/dashboard/stats
 router.get('/:id/dashboard/stats', async (req, res) => {
   try {

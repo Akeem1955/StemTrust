@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, Image, Link, FileText, AlertCircle, X, Loader2 } from 'lucide-react';
+import { Upload, Image, Link, FileText, AlertCircle, X, Loader2, Wallet } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -23,7 +23,11 @@ export function SubmitEvidenceDialog({ open, onClose, milestone, projectId: _pro
   const [url, setUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [walletAddress, setWalletAddress] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Note: We DON'T auto-fill from connected wallet because useWallet returns hex format
+  // Researcher must paste their bech32 address (addr_test1... or addr1...)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -39,27 +43,60 @@ export function SubmitEvidenceDialog({ open, onClose, milestone, projectId: _pro
     e.preventDefault();
     setIsSubmitting(true);
 
+    // Validate wallet address exists
+    if (!walletAddress) {
+      toast.error('Please enter your wallet address to receive funds');
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Validate wallet address format - must be bech32 (addr_test1... or addr1...)
+    if (!walletAddress.startsWith('addr')) {
+      toast.error('Invalid wallet address! Must start with addr_test1 or addr1');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      let finalUrl = url;
-
-      // Simulate file upload if a file is selected
-      if (selectedFile) {
-        // In a real app, we would upload to IPFS/Arweave here
-        // For now, we simulate a decentralized storage URL
-        const mockIpfsHash = `Qm${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
-        finalUrl = `https://ipfs.io/ipfs/${mockIpfsHash}?filename=${encodeURIComponent(selectedFile.name)}`;
-      } else if (evidenceType !== 'link' && !url) {
-        toast.error('Please select a file or provide a URL');
-        setIsSubmitting(false);
-        return;
-      }
-
-      await submitEvidence(milestone.id, [{
+      let evidenceData: any = {
         type: evidenceType,
         title,
         description,
-        url: finalUrl
-      }]);
+        url: ''
+      };
+
+      // Convert file to base64 if a file is selected
+      if (selectedFile) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            // Extract base64 data after the data URL prefix
+            const base64Data = result.split(',')[1];
+            resolve(base64Data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(selectedFile);
+        });
+
+        evidenceData = {
+          ...evidenceData,
+          fileName: selectedFile.name,
+          fileData: base64,
+          mimeType: selectedFile.type || 'application/octet-stream'
+        };
+      } else if (evidenceType === 'link' && url) {
+        // For links, just store the URL
+        evidenceData.url = url;
+      } else if (!url) {
+        toast.error('Please select a file or provide a URL');
+        setIsSubmitting(false);
+        return;
+      } else {
+        evidenceData.url = url;
+      }
+
+      await submitEvidence(milestone.id, [evidenceData], walletAddress);
 
       toast.success(`Evidence submitted for Stage ${milestone.stageNumber}! Community voting will begin.`);
       onClose();
@@ -75,6 +112,7 @@ export function SubmitEvidenceDialog({ open, onClose, milestone, projectId: _pro
     setTitle('');
     setDescription('');
     setUrl('');
+    setWalletAddress('');
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -256,13 +294,34 @@ export function SubmitEvidenceDialog({ open, onClose, milestone, projectId: _pro
               />
             </div>
 
+            {/* Wallet Address for receiving funds */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Wallet className="size-4 text-green-600" />
+                <Label htmlFor="wallet" className="font-medium text-green-800">
+                  Your Wallet Address (for receiving funds) *
+                </Label>
+              </div>
+              <Input
+                id="wallet"
+                value={walletAddress}
+                onChange={(e) => setWalletAddress(e.target.value)}
+                placeholder="addr_test1qz... or addr1qz..."
+                className="font-mono text-sm"
+                required
+              />
+              <p className="text-xs text-gray-600 mt-1.5">
+                Paste your Cardano wallet address. Funds will be sent here when your milestone is approved.
+              </p>
+            </div>
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <h4 className="font-medium text-sm mb-1.5">What Happens Next?</h4>
               <ol className="text-xs text-gray-700 space-y-0.5 list-decimal list-inside">
                 <li>Your evidence is uploaded to decentralized storage (IPFS/Arweave)</li>
                 <li>Evidence hash is recorded on Cardano blockchain</li>
                 <li>Community funders are notified to review and vote</li>
-                <li>75% approval triggers automatic fund release via smart contract</li>
+                <li>75% approval triggers automatic fund release to your wallet</li>
               </ol>
             </div>
           </form>

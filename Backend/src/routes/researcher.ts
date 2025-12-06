@@ -67,6 +67,22 @@ router.patch('/:id', async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
+    // VALIDATE WALLET ADDRESS - must be bech32 format (addr_test1... or addr1...)
+    // Reject hex format wallet addresses
+    if (updates.walletAddress) {
+      if (!updates.walletAddress.startsWith('addr')) {
+        console.log(`[Researcher] ❌ REJECTED invalid wallet format: ${updates.walletAddress}`);
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_WALLET_FORMAT',
+            message: 'Wallet address must be in bech32 format (start with addr_test1 or addr1)'
+          }
+        });
+      }
+      console.log(`[Researcher] ✅ Valid wallet format: ${updates.walletAddress}`);
+    }
+
     const researcher = await prisma.researcher.update({
       where: { id },
       data: {

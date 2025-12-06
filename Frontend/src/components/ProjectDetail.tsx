@@ -24,6 +24,19 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Function to refresh project data - can be called by child components
+  const refreshProject = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getProject(projectId);
+      setProject(data);
+    } catch (e) {
+      console.error("Failed to refresh project", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     async function loadProject() {
       try {
@@ -360,6 +373,7 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
               currentUser={currentUser}
               isBacker={isBacker}
               isResearcher={isResearcher}
+              onUpdate={refreshProject}
             />
           </TabsContent>
         </Tabs>
@@ -371,6 +385,8 @@ export function ProjectDetail({ projectId, currentUser, onBack }: ProjectDetailP
           onClose={() => {
             setEvidenceDialogOpen(false);
             setSelectedMilestone(null);
+            // Refresh project data after evidence submission
+            refreshProject();
           }}
           milestone={selectedMilestone}
           projectId={project.id}

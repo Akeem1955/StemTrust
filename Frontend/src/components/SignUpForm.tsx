@@ -25,12 +25,22 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
     organization: '',
     institution: '',
     location: '',
-    description: ''
+    description: '',
+    walletAddress: '' // Researcher must input bech32 address manually
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showWalletGuide, setShowWalletGuide] = useState(false);
+  const [walletValid, setWalletValid] = useState(false);
+  // Organizations and community still use wallet connection
   const { connected, address, connectWallet, availableWallets } = useWallet();
+  const [showWalletGuide, setShowWalletGuide] = useState(false);
+
+  // Validate wallet address format for researchers
+  const validateWalletAddress = (addr: string) => {
+    const isValid = addr.startsWith('addr_test1') || addr.startsWith('addr1');
+    setWalletValid(isValid);
+    return isValid;
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({
@@ -54,8 +64,19 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
         throw new Error('Password must be at least 8 characters');
       }
 
-      if (!connected) {
-        throw new Error('Please connect your Cardano wallet first');
+      // For researchers: require valid bech32 wallet address
+      if (userType === 'individual') {
+        if (!formData.walletAddress) {
+          throw new Error('Please enter your Cardano wallet address');
+        }
+        if (!formData.walletAddress.startsWith('addr_test1') && !formData.walletAddress.startsWith('addr1')) {
+          throw new Error('Invalid wallet address! Must start with addr_test1 (testnet) or addr1 (mainnet)');
+        }
+      } else {
+        // Organizations and community still use wallet connection
+        if (!connected) {
+          throw new Error('Please connect your Cardano wallet first');
+        }
       }
 
       // Map frontend userType to backend UserRole
@@ -79,10 +100,12 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
       api.setToken(response.token);
 
       // Enhance user object with wallet address and type for frontend compatibility
+      // For researchers: use the manually entered bech32 address
+      // For others: use the connected wallet address
       const userData = {
         ...response.user,
         type: userType,
-        walletAddress: address,
+        walletAddress: userType === 'individual' ? formData.walletAddress : address,
         // Ensure these fields are present for frontend display if backend didn't return them
         name: formData.name,
         organization: formData.name, // Use name for organization field, not the type
@@ -284,68 +307,116 @@ export function SignUpForm({ userType, onSuccess, onSwitchToSignIn }: SignUpForm
         </div>
       </div>
 
-      {/* Wallet Connection */}
+      {/* Wallet Section - Different for researchers vs organizations/community */}
       <div>
-        <Label>Cardano Wallet Connection</Label>
-        {connected ? (
-          <div className="mt-1 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="size-5 text-green-600" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-green-900">Wallet Connected Successfully</p>
-                <p className="text-xs font-mono text-green-700">{address?.slice(0, 20)}...{address?.slice(-10)}</p>
-              </div>
+        {userType === 'individual' ? (
+          // Researchers: Manual wallet address input (bech32 format)
+          <>
+            <Label htmlFor="walletAddress">Cardano Wallet Address (for receiving funds)</Label>
+            <div className="relative mt-1">
+              <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-gray-400" />
+              <Input
+                id="walletAddress"
+                name="walletAddress"
+                placeholder="addr_test1qrk47v4t4..."
+                value={formData.walletAddress}
+                onChange={(e) => {
+                  handleChange(e);
+                  validateWalletAddress(e.target.value);
+                }}
+                className={`pl-10 font-mono text-sm ${formData.walletAddress && !walletValid
+                    ? 'border-red-500 focus:ring-red-500'
+                    : formData.walletAddress && walletValid
+                      ? 'border-green-500 focus:ring-green-500'
+                      : ''
+                  }`}
+                required
+              />
             </div>
-          </div>
+            {formData.walletAddress && !walletValid && (
+              <p className="text-xs text-red-600 mt-1">
+                Invalid address! Must start with addr_test1 (testnet) or addr1 (mainnet)
+              </p>
+            )}
+            {formData.walletAddress && walletValid && (
+              <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                <CheckCircle className="size-3" /> Valid wallet address format
+              </p>
+            )}
+            <p className="text-xs text-gray-500 mt-2">
+              Enter your Cardano wallet address where you want to receive research funds.
+              You can find this in your wallet (e.g., Nami, Eternl, Lace).
+            </p>
+          </>
         ) : (
-          <div className="mt-1 space-y-2">
-            <Alert>
-              <Wallet className="size-4" />
-              <AlertDescription>
-                You must connect a Cardano wallet to create an account.
-                This wallet will be used for all transactions.
-              </AlertDescription>
-            </Alert>
-            {availableWallets.length > 0 ? (
-              <div className="grid grid-cols-2 gap-2">
-                {availableWallets.map((wallet) => (
+          // Organizations/Community: Wallet connection
+          <>
+            <Label>Cardano Wallet Connection</Label>
+            {connected ? (
+              <div className="mt-1 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="size-5 text-green-600" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-green-900">Wallet Connected Successfully</p>
+                    <p className="text-xs font-mono text-green-700">{address?.slice(0, 20)}...{address?.slice(-10)}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1 space-y-2">
+                <Alert>
+                  <Wallet className="size-4" />
+                  <AlertDescription>
+                    You must connect a Cardano wallet to create an account.
+                    This wallet will be used for all transactions.
+                  </AlertDescription>
+                </Alert>
+                {availableWallets.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {availableWallets.map((wallet) => (
+                      <Button
+                        key={wallet.name}
+                        type="button"
+                        variant="outline"
+                        onClick={handleWalletConnect}
+                        className="justify-start"
+                      >
+                        <img src={wallet.icon} alt={wallet.name} className="size-5 mr-2" />
+                        {wallet.name}
+                      </Button>
+                    ))}
+                  </div>
+                ) : (
                   <Button
-                    key={wallet.name}
                     type="button"
                     variant="outline"
                     onClick={handleWalletConnect}
-                    className="justify-start"
+                    className="w-full"
                   >
-                    <img src={wallet.icon} alt={wallet.name} className="size-5 mr-2" />
-                    {wallet.name}
+                    <Wallet className="mr-2 size-4" />
+                    Connect Cardano Wallet
                   </Button>
-                ))}
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowWalletGuide(true)}
+                  className="w-full"
+                >
+                  <HelpCircle className="mr-2 size-4" />
+                  How to Install a Cardano Wallet
+                </Button>
               </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleWalletConnect}
-                className="w-full"
-              >
-                <Wallet className="mr-2 size-4" />
-                Connect Cardano Wallet
-              </Button>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowWalletGuide(true)}
-              className="w-full"
-            >
-              <HelpCircle className="mr-2 size-4" />
-              How to Install a Cardano Wallet
-            </Button>
-          </div>
+          </>
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={loading || !connected}>
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={loading || (userType === 'individual' ? !walletValid : !connected)}
+      >
         {loading ? 'Creating Account...' : 'Create Account'}
       </Button>
 

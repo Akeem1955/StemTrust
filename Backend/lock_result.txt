@@ -1,0 +1,25 @@
+=== StemTrust Lock Test (CORRECTED) ===
+
+Wallet Address: addr_test1qr4nrt2tq4lvaertkvzld379uftynxhk8cauyvnvk094eup6uqtp3qg89u3n2pwku94vjr62jlqa80fh5zwtlr2vl3zqxr2s8d
+Signer Hash: eb31ad4b057ecee46bb305f6c7c5e256499af63e3bc2326cb3cb5cf0
+Script Address: addr_test1wpr5drrcxsf7adfjrxqtjjldh8u7tgwg27672x8pzl09zrsxx5pg8
+
+Locking 100 ADA (100000000 lovelace)
+Milestones: 10%, 20%, 30%, 40%
+
+Datum: {"alternative":0,"fields":["eb31ad4b057ecee46bb305f6c7c5e256499af63e3bc2326cb3cb5cf0","eb31ad4b057ecee46bb305f6c7c5e256499af63e3bc2326cb3cb5cf0",["eb31ad4b057ecee46bb305f6c7c5e256499af63e3bc2326cb3cb5cf0"],100000000,[10,20,30,40],0]}
+
+Wallet UTXOs: 3
+
+=== Building Lock Transaction ===
+Transaction built!
+Transaction signed!
+
+Submitting to blockchain...
+
+=== SUCCESS ===
+TxHash: 1b95d5223b63512aa3099499e3bb9aee1d71acf38b6d76f836f6bd0416dc2fdc
+View: https://preprod.cardanoscan.io/transaction/1b95d5223b63512aa3099499e3bb9aee1d71acf38b6d76f836f6bd0416dc2fdc
+
+Locked 100 ADA at script address
+This datum uses lovelace values and can be unlocked properly

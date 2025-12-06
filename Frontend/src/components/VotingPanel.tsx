@@ -24,14 +24,16 @@ import { Project, Milestone, submitVote, api, OrganizationMember } from '../lib/
 import { useWallet } from './WalletProvider';
 import { toast } from 'sonner';
 
+
 interface VotingPanelProps {
   project: Project;
   currentUser: User | null;
   isBacker: boolean;
   isResearcher?: boolean;
+  onUpdate?: () => void; // Callback to refresh parent data
 }
 
-export function VotingPanel({ project, currentUser, isBacker, isResearcher = false }: VotingPanelProps) {
+export function VotingPanel({ project, currentUser, isBacker, isResearcher = false, onUpdate }: VotingPanelProps) {
   const [votingMilestone, setVotingMilestone] = useState<string | null>(null);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [expandedMilestone, setExpandedMilestone] = useState<string | null>(null);
@@ -60,21 +62,20 @@ export function VotingPanel({ project, currentUser, isBacker, isResearcher = fal
   }, [isProjectOrganization, project.organizationId]);
 
   const votingMilestones = project.milestones.filter(m => m.status === 'voting');
+  const approvedMilestones = project.milestones.filter(m => m.status === 'approved');
   const totalVotingPower = members.reduce((sum, m) => sum + m.votingPower, 0);
 
-  const handleVote = async (milestoneId: string, voteType: 'approve' | 'reject') => {
-    if (!connected) {
-      toast.error('Please connect your wallet to vote');
-      return;
-    }
+  // State for release funds dialog
 
+
+  // OFF-CHAIN VOTING - No wallet signature needed!
+  const handleVote = async (milestoneId: string, voteType: 'approve' | 'reject') => {
     if (!isProjectOrganization) {
       toast.error('Only the sponsoring organization can vote on this project');
       return;
     }
 
     // Find the member ID from loaded members
-    // Match by email since that's what links user to member
     const currentMember = members.find(m => m.email === currentUser?.email);
 
     if (!currentMember) {
@@ -87,44 +88,33 @@ export function VotingPanel({ project, currentUser, isBacker, isResearcher = fal
 
     setVotingMilestone(milestoneId);
     try {
-      // Sign the vote
-      const message = JSON.stringify({
-        milestoneId,
-        voteType,
-        timestamp: Date.now(),
-        voter: memberId,
-        organizationId: project.organizationId
-      });
-
-      let signature = '';
-      try {
-        if (signData) {
-          signature = await signData(message);
-        }
-      } catch (err) {
-        console.error('Signing failed', err);
-        toast.error('Failed to sign vote. Please try again.');
-        setVotingMilestone(null);
-        return;
-      }
-
-      // Submit to backend
+      // Submit vote to backend (NO signature required - off-chain voting)
       const response = await submitVote({
         milestoneId,
         projectId: project.id,
         memberId,
         voteType,
-        votingPower: memberVotingPower,
-        signature,
-        walletAddress: address || undefined
+        votingPower: memberVotingPower
+        // No signature or walletAddress needed for off-chain voting
       });
 
       if (response.success) {
         toast.success(`Vote ${voteType === 'approve' ? 'APPROVED' : 'REJECTED'} recorded!`);
 
-        // Handle fund release if threshold reached
-        if (response.releaseData && voteType === 'approve') {
-          toast.success('Threshold reached! Funds will be released to the researcher.');
+        // Check if funds were automatically released
+        if (response.fundRelease?.success) {
+          toast.success(`Funds released automatically! Tx: ${response.fundRelease.txHash?.slice(0, 20)}...`);
+        } else if (response.votingSummary?.hasReachedThreshold) {
+          if (response.fundRelease?.error) {
+            toast.warning(`Threshold reached but fund release failed: ${response.fundRelease.error}`);
+          } else {
+            toast.success('Voting threshold reached! Funds pending release.');
+          }
+        }
+
+        // Refresh parent data
+        if (onUpdate) {
+          onUpdate();
         }
       }
     } catch (error: any) {
@@ -195,7 +185,7 @@ export function VotingPanel({ project, currentUser, isBacker, isResearcher = fal
     );
   }
 
-  // No active votes
+  // No active votes - but may have approved milestones to release
   if (votingMilestones.length === 0) {
     return (
       <div className="space-y-6">
@@ -207,14 +197,45 @@ export function VotingPanel({ project, currentUser, isBacker, isResearcher = fal
           />
         )}
 
-        <Card className="p-8 text-center">
-          <CheckCircle className="size-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold mb-2">No Pending Votes</h3>
-          <p className="text-gray-600">
-            There are no milestones awaiting approval. You'll be notified when the researcher
-            submits evidence for review.
-          </p>
-        </Card>
+        {/* Show approved milestones - auto-released by backend */}
+        {approvedMilestones.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <CheckCircle className="size-5 text-green-600" />
+              Approved Milestones
+            </h3>
+
+            {approvedMilestones.map(milestone => (
+              <Card key={milestone.id} className="p-4 border-green-200 bg-green-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">
+                      Stage {milestone.stageNumber}: {milestone.title}
+                    </h4>
+                    <p className="text-sm text-green-700 font-medium">
+                      ✓ {milestone.fundingAmount} ADA released to researcher
+                    </p>
+                  </div>
+                  <div className="px-3 py-1 bg-green-100 rounded-full text-green-700 text-sm font-medium">
+                    Auto-Released
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Only show "No Pending Votes" if there are also no approved milestones */}
+        {approvedMilestones.length === 0 && (
+          <Card className="p-8 text-center">
+            <CheckCircle className="size-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2">No Pending Votes</h3>
+            <p className="text-gray-600">
+              There are no milestones awaiting approval. You'll be notified when the researcher
+              submits evidence for review.
+            </p>
+          </Card>
+        )}
       </div>
     );
   }
@@ -252,6 +273,34 @@ export function VotingPanel({ project, currentUser, isBacker, isResearcher = fal
           connected={connected}
         />
       ))}
+
+      {/* Approved milestones - funds auto-released by backend */}
+      {approvedMilestones.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <CheckCircle className="size-5 text-green-600" />
+            Approved Milestones
+          </h3>
+
+          {approvedMilestones.map(milestone => (
+            <Card key={milestone.id} className="p-4 border-green-200 bg-green-50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">
+                    Stage {milestone.stageNumber}: {milestone.title}
+                  </h4>
+                  <p className="text-sm text-green-700 font-medium">
+                    ✓ {milestone.fundingAmount} ADA released to researcher
+                  </p>
+                </div>
+                <div className="px-3 py-1 bg-green-100 rounded-full text-green-700 text-sm font-medium">
+                  Auto-Released
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -426,7 +475,7 @@ function MilestoneVotingCard({
           {expanded && (
             <div className="px-6 pb-6">
               <div className="grid md:grid-cols-2 gap-4">
-                {milestone.evidence.map(evidence => (
+                {milestone.evidence.map((evidence: any) => (
                   <div key={evidence.id} className="bg-white border rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div>
@@ -435,17 +484,50 @@ function MilestoneVotingCard({
                           {evidence.type}
                         </Badge>
                       </div>
-                      <Button size="sm" variant="outline" asChild>
-                        <a href={evidence.url} target="_blank" rel="noopener noreferrer">
+                      {/* Show appropriate action button based on evidence type */}
+                      {evidence.url ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={evidence.url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="size-3 mr-1" />
+                            View Link
+                          </a>
+                        </Button>
+                      ) : evidence.fileData && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            // Create download link for file
+                            const link = document.createElement('a');
+                            link.href = `data:${evidence.mimeType || 'application/octet-stream'};base64,${evidence.fileData}`;
+                            link.download = evidence.fileName || 'evidence-file';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                        >
                           <ExternalLink className="size-3 mr-1" />
-                          View
-                        </a>
-                      </Button>
+                          Download
+                        </Button>
+                      )}
                     </div>
+
+                    {/* Show image preview if it's an image type */}
+                    {evidence.type === 'image' && evidence.fileData && (
+                      <div className="mb-3 rounded-lg overflow-hidden border">
+                        <img
+                          src={`data:${evidence.mimeType || 'image/png'};base64,${evidence.fileData}`}
+                          alt={evidence.title || 'Evidence image'}
+                          className="w-full max-h-64 object-contain bg-gray-50"
+                        />
+                      </div>
+                    )}
+
                     <p className="text-sm text-gray-600 mb-2">{evidence.description}</p>
-                    <p className="text-xs text-gray-400">
-                      Uploaded: {new Date(evidence.uploadedAt).toLocaleDateString()}
-                    </p>
+                    <div className="flex items-center justify-between text-xs text-gray-400">
+                      <span>Uploaded: {new Date(evidence.uploadedAt).toLocaleDateString()}</span>
+                      {evidence.fileName && <span>{evidence.fileName}</span>}
+                    </div>
                   </div>
                 ))}
               </div>

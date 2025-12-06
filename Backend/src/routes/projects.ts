@@ -9,7 +9,8 @@ import {
   Milestone,
   ProjectStatus
 } from '../types/api';
-import { lockFunds, getScript, buildDatum } from '../services/smartContract';
+import { lockFunds, releaseFunds, getScript, buildDatum, getBackendWalletAddress, getBackendWalletPubKeyHash, getBackendWalletBalance } from '../services/smartContract';
+import { deserializeAddress } from '@meshsdk/core';
 
 const router = Router();
 
@@ -35,9 +36,21 @@ const formatProject = (p: any): Project => ({
     id: m.id,
     stageNumber: m.stageNumber,
     title: m.title,
+    description: m.description || '',
     status: m.status as any,
     fundingAmount: Number(m.fundingAmount),
-    fundingPercentage: m.fundingPercentage
+    fundingPercentage: m.fundingPercentage,
+    evidence: m.evidence?.map((e: any) => ({
+      id: e.id,
+      type: e.type,
+      title: e.title,
+      description: e.description,
+      url: e.url,
+      fileName: e.fileName,
+      fileData: e.fileData,
+      mimeType: e.mimeType,
+      uploadedAt: e.uploadedAt?.toISOString() || new Date().toISOString()
+    })) || []
   })) || [],
   teamMembers: p.teamMembers?.map((tm: any) => ({
     id: tm.member.id,
@@ -52,6 +65,33 @@ const formatProject = (p: any): Project => ({
     amount: Number(p.totalFunding)
   }] : [],
   currentMilestone: (p.milestones?.filter((m: any) => m.status === 'approved').length || 0) + 1
+});
+
+// GET /api/projects/deposit-address - Returns backend wallet address for organizations to send funds to
+router.get('/deposit-address', async (req, res) => {
+  try {
+    const walletAddress = await getBackendWalletAddress();
+    const balance = await getBackendWalletBalance();
+
+    res.json({
+      success: true,
+      data: {
+        depositAddress: walletAddress,
+        network: 'preprod',
+        currentBalance: balance,
+        instructions: 'Send the funding amount to this address. Once confirmed, proceed with project onboarding.'
+      }
+    });
+  } catch (error: any) {
+    console.error('Error getting deposit address:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'WALLET_ERROR',
+        message: error.message || 'Failed to get deposit address'
+      }
+    });
+  }
 });
 
 // GET /api/projects/lock-tx-params - Returns parameters needed for frontend to build lock transaction
@@ -95,7 +135,8 @@ router.get('/:id', async (req, res) => {
           include: { user: true }
         },
         milestones: {
-          orderBy: { stageNumber: 'asc' }
+          orderBy: { stageNumber: 'asc' },
+          include: { evidence: true }
         },
         teamMembers: {
           include: {
@@ -113,6 +154,515 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching project:', error);
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR' } });
+  }
+});
+
+// GET /api/projects/:projectId/milestones/:milestoneId/unlock-tx-params
+// Returns parameters needed for frontend to build unlock transaction
+router.get('/:projectId/milestones/:milestoneId/unlock-tx-params', async (req, res) => {
+  try {
+    const { projectId, milestoneId } = req.params;
+
+    // Fetch project with all required data
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        organization: { include: { members: true } },
+        researcher: true,
+        milestones: { orderBy: { stageNumber: 'asc' } }
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } });
+    }
+
+    const milestone = project.milestones.find(m => m.id === milestoneId);
+    if (!milestone) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Milestone not found' } });
+    }
+
+    if (milestone.status !== 'approved') {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_STATE', message: 'Milestone not yet approved for release' } });
+    }
+
+    const { scriptAddr, scriptCbor } = getScript();
+    const milestoneIndex = project.milestones.findIndex(m => m.id === milestoneId);
+
+    // Helper to safely convert wallet address to pubkey hash
+    const addressToPubKeyHash = (address: string | null | undefined): string => {
+      if (!address) return '';
+      try {
+        return deserializeAddress(address).pubKeyHash;
+      } catch (e) {
+        console.warn('Could not deserialize address:', address);
+        return '';
+      }
+    };
+
+    // Convert wallet addresses to pubkey hashes (what the smart contract expects)
+    const orgPubKeyHash = addressToPubKeyHash(project.organization?.walletAddress);
+    const researcherPubKeyHash = addressToPubKeyHash(project.researcher?.walletAddress);
+    const memberPubKeyHashes = (project.organization?.members || [])
+      .filter(m => m.walletAddress)
+      .map(m => addressToPubKeyHash(m.walletAddress))
+      .filter(h => h !== '');
+
+    // Fetch script UTXOs from Blockfrost (server-side to avoid CORS issues)
+    let scriptUtxos: any[] = [];
+    const blockfrostKey = process.env.BLOCKFROST;
+    if (blockfrostKey) {
+      try {
+        const { BlockfrostProvider } = await import('@meshsdk/core');
+        const provider = new BlockfrostProvider(blockfrostKey);
+        scriptUtxos = await provider.fetchAddressUTxOs(scriptAddr);
+        console.log('[unlock-tx-params] Found', scriptUtxos.length, 'UTXOs at script address');
+      } catch (e) {
+        console.error('[unlock-tx-params] Error fetching script UTXOs:', e);
+      }
+    }
+
+    console.log('[unlock-tx-params] Debug info:');
+    console.log('  Script Address:', scriptAddr);
+    console.log('  Project TxHash:', project.transactionHash);
+    console.log('  Org PubKeyHash:', orgPubKeyHash);
+    console.log('  Researcher PubKeyHash:', researcherPubKeyHash);
+    console.log('  Member PubKeyHashes:', memberPubKeyHashes);
+    console.log('  Script UTXOs count:', scriptUtxos.length);
+
+    res.json({
+      success: true,
+      data: {
+        scriptAddress: scriptAddr,
+        scriptCbor: scriptCbor,
+        projectTxHash: project.transactionHash,
+        milestoneIndex,
+        releaseAmount: Number(milestone.fundingAmount),
+        researcherWallet: project.researcher?.walletAddress,
+        datumParams: {
+          organization: orgPubKeyHash,
+          researcher: researcherPubKeyHash,
+          members: memberPubKeyHashes,
+          totalFunds: Number(project.totalFunding) * 1_000_000,
+          milestones: project.milestones.map(m => m.fundingPercentage || 0),
+          currentMilestone: milestoneIndex
+        },
+        isLastMilestone: milestoneIndex >= project.milestones.length - 1,
+        // Include script UTXOs fetched by backend
+        scriptUtxos: scriptUtxos.map(u => ({
+          txHash: u.input.txHash,
+          outputIndex: u.input.outputIndex,
+          amount: u.output.amount,
+          address: u.output.address
+        }))
+      }
+    });
+  } catch (error: any) {
+    console.error('Error getting unlock params:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: error.message || 'Failed to get unlock parameters' }
+    });
+  }
+});
+
+// POST /api/projects/:projectId/milestones/:milestoneId/build-unlock-tx
+// Builds the complete unsigned transaction on backend (avoids CORS issues)
+router.post('/:projectId/milestones/:milestoneId/build-unlock-tx', async (req, res) => {
+  try {
+    const { projectId, milestoneId } = req.params;
+    const { walletAddress, walletUtxos } = req.body;
+
+    if (!walletAddress || !walletUtxos) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'walletAddress and walletUtxos are required' }
+      });
+    }
+
+    // Fetch project with all required data
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        organization: { include: { members: true } },
+        researcher: true,
+        milestones: { orderBy: { stageNumber: 'asc' } }
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } });
+    }
+
+    const milestone = project.milestones.find(m => m.id === milestoneId);
+    if (!milestone) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Milestone not found' } });
+    }
+
+    if (milestone.status !== 'approved') {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_STATE', message: 'Milestone not yet approved' } });
+    }
+
+    const { scriptAddr, scriptCbor } = getScript();
+    const milestoneIndex = project.milestones.findIndex(m => m.id === milestoneId);
+
+    // Get pubkey hashes
+    const addressToPubKeyHash = (address: string | null | undefined): string => {
+      if (!address) return '';
+      try {
+        return deserializeAddress(address).pubKeyHash;
+      } catch (e) {
+        console.warn('[build-unlock-tx] Failed to deserialize address:', address);
+        return '';
+      }
+    };
+
+    // Try org wallet first, fallback to connected wallet
+    let orgPubKeyHash = addressToPubKeyHash(project.organization?.walletAddress);
+    if (!orgPubKeyHash || orgPubKeyHash.length !== 56) {
+      console.log('[build-unlock-tx] Org wallet not set, using connected wallet:', walletAddress);
+      orgPubKeyHash = addressToPubKeyHash(walletAddress);
+    }
+
+    const researcherPubKeyHash = addressToPubKeyHash(project.researcher?.walletAddress);
+
+    // Get member pubkey hashes, filter out empty ones
+    let memberPubKeyHashes = (project.organization?.members || [])
+      .filter((m: any) => m.walletAddress)
+      .map((m: any) => addressToPubKeyHash(m.walletAddress))
+      .filter((h: string) => h !== '' && h.length === 56);
+
+    console.log('[build-unlock-tx] Org pubkey hash:', orgPubKeyHash);
+    console.log('[build-unlock-tx] Researcher pubkey hash:', researcherPubKeyHash);
+    console.log('[build-unlock-tx] Member pubkey hashes:', memberPubKeyHashes);
+
+    // CRITICAL: If no valid member hashes, use the org pubkey hash
+    // The smart contract requires at least one valid signer
+    if (memberPubKeyHashes.length === 0 && orgPubKeyHash) {
+      console.log('[build-unlock-tx] No member hashes found, using org pubkey hash');
+      memberPubKeyHashes = [orgPubKeyHash];
+    }
+
+    // Validate we have the required pubkey hashes
+    if (!orgPubKeyHash || orgPubKeyHash.length !== 56) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_STATE', message: 'Could not determine organization pubkey hash from wallet' }
+      });
+    }
+
+    // Fetch script UTXOs
+    const blockfrostKey = process.env.BLOCKFROST;
+    if (!blockfrostKey) {
+      return res.status(500).json({ success: false, error: { code: 'CONFIG_ERROR', message: 'Blockfrost not configured' } });
+    }
+
+    const { BlockfrostProvider, MeshTxBuilder } = await import('@meshsdk/core');
+    const provider = new BlockfrostProvider(blockfrostKey);
+    const scriptUtxos = await provider.fetchAddressUTxOs(scriptAddr);
+
+    if (!scriptUtxos || scriptUtxos.length === 0) {
+      return res.status(400).json({ success: false, error: { code: 'NO_UTXOS', message: 'No UTXOs at script address' } });
+    }
+
+    // Find matching UTXO or use first
+    let scriptUtxo = scriptUtxos.find((u: any) => u.input.txHash === project.transactionHash);
+    if (!scriptUtxo) {
+      scriptUtxo = scriptUtxos[0];
+    }
+
+    // Calculate amounts
+    const releaseLovelace = Number(milestone.fundingAmount) * 1_000_000;
+    const currentValue = parseInt(
+      scriptUtxo.output.amount.find((a: any) => a.unit === 'lovelace')?.quantity || '0'
+    );
+    const remainingValue = currentValue - releaseLovelace;
+    const isLastMilestone = milestoneIndex >= project.milestones.length - 1;
+
+    console.log('[build-unlock-tx] Release:', releaseLovelace, 'Current:', currentValue, 'Remaining:', remainingValue);
+
+    // Get the researcher's wallet address - must be bech32 format (addr_test1...)
+    const researcherWalletAddress = project.researcher?.walletAddress;
+    console.log('[build-unlock-tx] Researcher wallet from DB:', researcherWalletAddress);
+
+    // Validate the researcher address is a proper bech32 address
+    let payToAddress = researcherWalletAddress;
+    if (!payToAddress || !payToAddress.startsWith('addr_')) {
+      console.log('[build-unlock-tx] Researcher has no valid wallet, using org wallet:', walletAddress);
+      // If researcher hasn't set their wallet yet, pay to the org wallet for now
+      payToAddress = walletAddress;
+    }
+    console.log('[build-unlock-tx] Paying to address:', payToAddress);
+
+    // Build redeemer
+    const redeemer: any = {
+      alternative: 0,
+      fields: [milestoneIndex, memberPubKeyHashes]
+    };
+
+    // Build next datum
+    const nextDatum: any = {
+      alternative: 0,
+      fields: [
+        orgPubKeyHash,
+        researcherPubKeyHash,
+        memberPubKeyHashes,
+        Number(project.totalFunding) * 1_000_000,
+        project.milestones.map(m => m.fundingPercentage || 0),
+        milestoneIndex + 1
+      ]
+    };
+
+    // Build transaction
+    const txBuilder = new MeshTxBuilder({
+      fetcher: provider,
+      submitter: provider,
+    });
+
+    // Spend script UTXO
+    await txBuilder
+      .spendingPlutusScriptV3()
+      .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
+      .txInInlineDatumPresent()
+      .txInRedeemerValue(redeemer)
+      .txInScript(scriptCbor);
+
+    // Pay the researcher (must be valid bech32 address)
+    txBuilder.txOut(payToAddress as string, [
+      { unit: 'lovelace', quantity: releaseLovelace.toString() }
+    ]);
+
+    // Continuing output if not last milestone
+    if (!isLastMilestone && remainingValue > 2_000_000) {
+      txBuilder
+        .txOut(scriptAddr, [
+          { unit: 'lovelace', quantity: remainingValue.toString() }
+        ])
+        .txOutInlineDatumValue(nextDatum);
+    }
+
+    // Required signers
+    txBuilder.requiredSignerHash(orgPubKeyHash);
+    for (const memberHash of memberPubKeyHashes.slice(0, 3)) {
+      if (memberHash) txBuilder.requiredSignerHash(memberHash);
+    }
+
+    // Find collateral from wallet UTXOs
+    const collateralUtxo = walletUtxos.find((u: any) => {
+      const lovelace = u.output?.amount?.find((a: any) => a.unit === 'lovelace');
+      return lovelace && parseInt(lovelace.quantity) >= 5_000_000;
+    });
+
+    if (collateralUtxo) {
+      txBuilder.txInCollateral(
+        collateralUtxo.input.txHash,
+        collateralUtxo.input.outputIndex,
+        collateralUtxo.output.amount,
+        collateralUtxo.output.address
+      );
+    }
+
+    txBuilder.changeAddress(walletAddress);
+    txBuilder.selectUtxosFrom(walletUtxos);
+
+    await txBuilder.complete();
+
+    console.log('[build-unlock-tx] Transaction built successfully!');
+
+    res.json({
+      success: true,
+      data: {
+        unsignedTx: txBuilder.txHex,
+        txHash: '', // Will be set after signing
+      }
+    });
+  } catch (error: any) {
+    console.error('Error building unlock tx:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'BUILD_ERROR', message: error.message || 'Failed to build transaction' }
+    });
+  }
+});
+
+// POST /api/projects/:projectId/milestones/:milestoneId/confirm-release
+// Called by frontend after successfully submitting the unlock transaction
+router.post('/:projectId/milestones/:milestoneId/confirm-release', async (req, res) => {
+  try {
+    const { projectId, milestoneId } = req.params;
+    const { transactionHash } = req.body;
+
+    if (!transactionHash) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Transaction hash is required' } });
+    }
+
+    // Verify milestone exists and is approved
+    const milestone = await prisma.milestone.findUnique({
+      where: { id: milestoneId },
+      include: { project: true }
+    });
+
+    if (!milestone || milestone.projectId !== projectId) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Milestone not found' } });
+    }
+
+    if (milestone.status !== 'approved') {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_STATE', message: 'Milestone is not in approved status' } });
+    }
+
+    // Update milestone status to 'released'
+    await prisma.milestone.update({
+      where: { id: milestoneId },
+      data: {
+        status: 'released',
+        releaseDate: new Date(),
+        transactionHash: transactionHash
+      }
+    });
+
+    // Update project funding released
+    await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        fundingReleased: {
+          increment: Number(milestone.fundingAmount)
+        }
+      }
+    });
+
+    console.log(`[Fund Release] Milestone ${milestoneId} released! Tx: ${transactionHash}`);
+
+    res.json({
+      success: true,
+      data: {
+        milestoneId,
+        status: 'released',
+        transactionHash,
+        amountReleased: Number(milestone.fundingAmount),
+        message: 'Funds confirmed as released'
+      }
+    });
+  } catch (error: any) {
+    console.error('Error confirming release:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: error.message || 'Failed to confirm release' }
+    });
+  }
+});
+
+// POST /api/projects/:projectId/milestones/:milestoneId/release-funds
+// BACKEND-ONLY: Releases funds using the backend wallet (no frontend wallet signing needed)
+router.post('/:projectId/milestones/:milestoneId/release-funds', async (req, res) => {
+  try {
+    const { projectId, milestoneId } = req.params;
+
+    // Fetch project with all required data
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        organization: { include: { members: true } },
+        researcher: true,
+        milestones: { orderBy: { stageNumber: 'asc' } }
+      }
+    });
+
+    if (!project) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Project not found' } });
+    }
+
+    const milestone = project.milestones.find(m => m.id === milestoneId);
+    if (!milestone) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Milestone not found' } });
+    }
+
+    if (milestone.status !== 'approved') {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_STATE', message: 'Milestone not yet approved for release' } });
+    }
+
+    const milestoneIndex = project.milestones.findIndex(m => m.id === milestoneId);
+    const releaseAmount = Number(milestone.fundingAmount);
+
+    // Get researcher's wallet address
+    let recipientAddress = project.researcher?.walletAddress;
+    if (!recipientAddress) {
+      return res.status(400).json({ success: false, error: { code: 'NO_WALLET', message: 'Researcher has not set their wallet address' } });
+    }
+
+    // Validate address format - must be bech32 (addr_test1... or addr1...)
+    if (!recipientAddress.startsWith('addr')) {
+      console.error(`[release-funds] Invalid wallet address format: ${recipientAddress.substring(0, 40)}...`);
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ADDRESS',
+          message: 'Researcher wallet address is not in valid bech32 format (should start with addr_test1 or addr1). Please ask researcher to re-submit evidence with a valid Cardano wallet address.'
+        }
+      });
+    }
+
+    // Get backend wallet pubkey hash (used as organization)
+    const backendPubKeyHash = await getBackendWalletPubKeyHash();
+
+    // Build datum params (backend wallet is org, researcher, and members)
+    const datumParams = {
+      organization: backendPubKeyHash,
+      researcher: backendPubKeyHash, // For now, same as org
+      members: [backendPubKeyHash],
+      totalFunds: Number(project.totalFunding) * 1_000_000,
+      milestones: project.milestones.map(m => m.fundingPercentage || 0),
+      currentMilestone: milestoneIndex
+    };
+
+    console.log(`[release-funds] Releasing ${releaseAmount} ADA for milestone ${milestoneIndex + 1} to ${recipientAddress}`);
+
+    // Call the smart contract release function
+    const txHash = await releaseFunds(
+      milestoneIndex,
+      releaseAmount,
+      recipientAddress,
+      project.transactionHash || '',
+      datumParams
+    );
+
+    // Update milestone status
+    await prisma.milestone.update({
+      where: { id: milestoneId },
+      data: {
+        status: 'released',
+        transactionHash: txHash
+      }
+    });
+
+    // Update project funding released
+    await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        fundingReleased: {
+          increment: releaseAmount
+        }
+      }
+    });
+
+    console.log(`[release-funds] SUCCESS! Tx: ${txHash}`);
+
+    res.json({
+      success: true,
+      data: {
+        milestoneId,
+        status: 'released',
+        transactionHash: txHash,
+        amountReleased: releaseAmount,
+        recipientAddress,
+        message: 'Funds released successfully'
+      }
+    });
+  } catch (error: any) {
+    console.error('[release-funds] ERROR:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'RELEASE_ERROR', message: error.message || 'Failed to release funds' }
+    });
   }
 });
 
@@ -202,49 +752,46 @@ router.post('/onboard', async (req, res) => {
       }
     });
 
-    // 3. Lock Funds on Blockchain
-    let txHash = 'mock-tx-hash';
-    let scriptAddress = 'addr_test1_mock_script';
+    // 3. Lock Funds on Blockchain using BACKEND wallet
+    // The organization has already sent funds to our deposit address
+    let txHash = 'pending';
+    let scriptAddress = 'pending';
 
-    // Check if frontend already signed and submitted the transaction
-    if (body.transactionHash) {
-      // Frontend handled the signing - use their transaction hash
-      txHash = body.transactionHash;
-      console.log('Using frontend-signed transaction:', txHash);
+    try {
+      // Get backend wallet pubkey hash (used for all datum fields)
+      const backendPubKeyHash = await getBackendWalletPubKeyHash();
+      const { scriptAddr } = getScript();
+      scriptAddress = scriptAddr;
 
-      // Get the real script address
-      try {
-        const { scriptAddr } = getScript();
-        scriptAddress = scriptAddr;
-      } catch (e) {
-        // If blueprint not available, keep mock address
-        console.warn('Could not get script address:', e);
-      }
-    } else if (process.env.BLOCKFROST && process.env.mnemonic) {
-      // Fallback: Backend signs with server wallet (deprecated)
-      console.warn('Using backend wallet for signing - this is deprecated');
-      try {
-        const mockHash = "a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2"; // Example
+      console.log('[Onboard] Locking funds with backend wallet...');
+      console.log('[Onboard] Backend PubKeyHash:', backendPubKeyHash);
+      console.log('[Onboard] Amount:', body.totalFunding, 'ADA');
 
-        txHash = await lockFunds(
-          Number(body.totalFunding), // Ensure number
-          body.milestones.map(m => ({ percentage: m.fundingPercentage })),
-          mockHash, // Organization
-          mockHash, // Researcher
-          [mockHash] // Members
-        );
-        // In a real app, we would get the script address from the contract compilation
-      } catch (e: any) {
-        console.error("Smart contract error:", e);
-        // We might want to delete the project if locking fails, or mark it as failed
-        return res.status(500).json({
-          success: false,
-          error: {
-            code: 'SMART_CONTRACT_ERROR',
-            message: e.message || 'Unknown error'
-          }
-        });
-      }
+      // DEBUG: Show the milestones being locked
+      const milestonePercentages = body.milestones.map(m => m.fundingPercentage);
+      console.log('[Onboard] Milestone percentages:', milestonePercentages);
+
+      // Lock funds using backend wallet
+      txHash = await lockFunds(
+        Number(body.totalFunding),
+        body.milestones.map(m => ({ percentage: m.fundingPercentage })),
+        backendPubKeyHash, // Organization (backend wallet)
+        backendPubKeyHash, // Researcher (placeholder, same as org for now)
+        [backendPubKeyHash] // Members (backend wallet is the only member)
+      );
+
+      console.log('[Onboard] Funds locked! TxHash:', txHash);
+    } catch (e: any) {
+      console.error('[Onboard] Smart contract error:', e);
+      // Delete the project since locking failed
+      await prisma.project.delete({ where: { id: project.id } });
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'SMART_CONTRACT_ERROR',
+          message: e.message || 'Failed to lock funds on blockchain'
+        }
+      });
     }
 
     // 4. Update Project with Smart Contract Info

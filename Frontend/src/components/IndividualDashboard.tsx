@@ -22,6 +22,21 @@ export function IndividualDashboard({ user, onLogout, onViewProject }: Individua
   const [loading, setLoading] = useState(true);
   const { connected, address, balance, network, connectWallet, disconnectWallet } = useWallet();
 
+  // Function to reload data - can be passed to child components
+  const refreshData = async () => {
+    if (user.researcherId) {
+      try {
+        setLoading(true);
+        const researcherProjects = await api.getResearcherProjects(user.researcherId);
+        setProjects(researcherProjects);
+      } catch (e) {
+        console.error("Failed to refresh researcher projects", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     async function loadData() {
       if (user.researcherId) {
@@ -40,14 +55,19 @@ export function IndividualDashboard({ user, onLogout, onViewProject }: Individua
     loadData();
   }, [user.researcherId]);
 
-  // Update wallet address when connected
-  useEffect(() => {
-    if (connected && address && user.researcherId) {
-      api.updateResearcher(user.researcherId, { walletAddress: address })
-        .then(() => console.log("Researcher wallet updated"))
-        .catch(err => console.error("Failed to update wallet", err));
-    }
-  }, [connected, address, user.researcherId]);
+  // NOTE: We do NOT auto-update the researcher's wallet address here!
+  // The wallet API (CIP-30) returns hex format addresses, not bech32.
+  // Researcher must manually input their bech32 address (addr_test1... or addr1...)
+  // when submitting evidence. This ensures the correct format for fund releases.
+  // 
+  // OLD CODE (removed):
+  // useEffect(() => {
+  //   if (connected && address && user.researcherId) {
+  //     api.updateResearcher(user.researcherId, { walletAddress: address })
+  //       .then(() => { ... })
+  //       .catch(err => ...);
+  //   }
+  // }, [connected, address, user.researcherId]);
 
   const userProjects = projects;
   const activeProjects = userProjects.filter(p => p.status === 'active');

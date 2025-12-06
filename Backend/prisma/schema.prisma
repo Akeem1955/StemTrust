@@ -53,6 +53,10 @@ model OrganizationMember {
   role           String    @default("member") // 'admin' | 'member' | 'viewer'
   joinedDate     DateTime  @default(now()) @map("joined_date") @db.Date
   lastActive     DateTime? @map("last_active")
+  
+  // Wallet for voting and multi-sig fund release
+  walletAddress  String?   @map("wallet_address")
+  walletProvider String?   @map("wallet_provider") // 'nami' | 'eternl' | 'lace' etc
 
   // Relations
   organization Organization @relation(fields: [organizationId], references: [id])
@@ -128,11 +132,13 @@ model Milestone {
   fundingAmount     Decimal?  @map("funding_amount") @db.Decimal(20, 2)
   fundingPercentage Int?      @map("funding_percentage")
   durationWeeks     Int?      @map("duration_weeks")
-  status            String?   // 'pending' | 'in_progress' | 'voting' | 'approved'
+  status            String?   // 'pending' | 'in_progress' | 'voting' | 'approved' | 'released'
   startDate         DateTime? @map("start_date") @db.Date
   endDate           DateTime? @map("end_date") @db.Date
   submittedDate     DateTime? @map("submitted_date")
   approvedDate      DateTime? @map("approved_date")
+  releaseDate       DateTime? @map("release_date")  // When funds were released
+  transactionHash   String?   @map("transaction_hash")  // On-chain tx hash for fund release
 
   // Relations
   project      Project       @relation(fields: [projectId], references: [id])
@@ -149,8 +155,11 @@ model Evidence {
   type        String?  // 'image' | 'document' | 'link' | 'app'
   title       String?
   description String?  @db.Text
-  url         String?
-  ipfsHash    String?  @map("ipfs_hash")
+  url         String?  // For links or external URLs
+  fileName    String?  @map("file_name") // Original file name
+  fileData    String?  @db.Text @map("file_data") // Base64 encoded file data
+  mimeType    String?  @map("mime_type") // File MIME type (e.g., image/png)
+  ipfsHash    String?  @map("ipfs_hash") // Keep for future IPFS support
   uploadedAt  DateTime @default(now()) @map("uploaded_at")
   uploadedBy  String?  @map("uploaded_by")
 

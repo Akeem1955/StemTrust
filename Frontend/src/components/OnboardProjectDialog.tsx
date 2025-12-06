@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, AlertCircle, Mail, CheckCircle, Plus, Trash2, Info, AlertTriangle, HelpCircle, Zap, Settings, Users, UserCheck, Shield, Wallet } from 'lucide-react';
+import { X, AlertCircle, Mail, CheckCircle, Plus, Trash2, Info, AlertTriangle, HelpCircle, Zap, Settings, Users, UserCheck, Shield } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,8 +11,6 @@ import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { api, OrganizationMember } from '../lib/api';
 import { MilestoneGuideDialog } from './MilestoneGuideDialog';
-import { useWallet } from './WalletProvider';
-import { BrowserWallet, MeshTxBuilder, KoiosProvider, Data } from '@meshsdk/core';
 
 interface OnboardProjectDialogProps {
   open: boolean;
@@ -82,9 +80,6 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
   const [availableMembers, setAvailableMembers] = useState<OrganizationMember[]>([]);
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
-
-  // Wallet connection for signing lock transactions
-  const { connected, walletName } = useWallet();
 
   // Load organization members when dialog opens
   useEffect(() => {
@@ -233,6 +228,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
 
     try {
       setSubmitting(true);
+      toast.info('Creating project and locking funds on blockchain...');
 
       // Create milestone structure with funding amounts
       const milestoneData = milestones.map(m => ({
@@ -243,74 +239,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
         durationWeeks: m.durationWeeks,
       }));
 
-      let transactionHash: string | undefined;
-
-      // If wallet is connected, sign the lock transaction on frontend
-      if (connected && walletName) {
-        try {
-          toast.info('Building lock transaction...');
-
-          // Get script parameters from backend
-          const lockParams = await api.getLockTxParams();
-
-          // Initialize wallet and provider
-          const provider = new KoiosProvider('preprod');
-          const wallet = await BrowserWallet.enable(walletName);
-          const walletAddress = await wallet.getChangeAddress();
-
-          // Build datum for the lock transaction
-          const fundingAmount = parseFloat(totalFunding);
-          const datum: Data = {
-            alternative: 0,
-            fields: [
-              walletAddress, // organization hash (using address as placeholder)
-              walletAddress, // researcher hash (will be updated when researcher signs up)
-              [walletAddress], // member hashes
-              Math.floor(fundingAmount * 1_000_000), // totalFunds in lovelace
-              milestoneData.map(m => m.fundingPercentage), // milestone percentages
-              0 // current milestone (starting at 0)
-            ]
-          };
-
-          // Build the transaction
-          const txBuilder = new MeshTxBuilder({
-            fetcher: provider,
-            submitter: provider,
-          });
-
-          const assets = [
-            {
-              unit: "lovelace",
-              quantity: (fundingAmount * 1_000_000).toString(),
-            },
-          ];
-
-          await txBuilder
-            .txOut(lockParams.scriptAddress, assets)
-            .txOutInlineDatumValue(datum)
-            .changeAddress(walletAddress)
-            .selectUtxosFrom(await wallet.getUtxos())
-            .complete();
-
-          // Sign and submit the transaction
-          toast.info('Please sign the transaction in your wallet...');
-          const unsignedTx = txBuilder.txHex;
-          const signedTx = await wallet.signTx(unsignedTx);
-          transactionHash = await wallet.submitTx(signedTx);
-
-          toast.success(`Funds locked! Tx: ${transactionHash.slice(0, 20)}...`);
-        } catch (lockError: any) {
-          console.error('Lock transaction failed:', lockError);
-          toast.error(`Failed to lock funds: ${lockError.message || 'Unknown error'}`);
-          setSubmitting(false);
-          return;
-        }
-      } else {
-        // No wallet connected - backend will handle locking (deprecated fallback)
-        toast.info('No wallet connected. Using server-side fund locking...');
-      }
-
-      // Call the API to onboard project
+      // Call the API to onboard project - backend handles ALL blockchain transactions
       const response = await api.onboardProject({
         organizationId,
         campaignId: campaignId || undefined,
@@ -322,7 +251,6 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
         milestoneMode,
         stagesCount: milestones.length,
         teamMemberIds: selectedMemberIds,
-        transactionHash, // Pass the frontend-signed transaction hash
       });
 
       if (response.emailSent) {

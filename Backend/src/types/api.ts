@@ -365,6 +365,13 @@ export interface SubmitVoteResponse {
     paymentAmount: number;
     researcherAddress: string;
   };
+  fundRelease?: {
+    success: boolean;
+    txHash?: string;
+    amount?: number;
+    recipient?: string;
+    error?: string;
+  } | null;
 }
 
 export interface ClaimMilestoneRequest {

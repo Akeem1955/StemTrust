@@ -28,7 +28,27 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
   const [projects, setProjects] = useState<Project[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const { connected, address, balance, network, connectWallet, disconnectWallet } = useWallet();
+
+  // Function to reload data - can be passed to child components
+  const refreshData = async () => {
+    if (user.organizationId) {
+      try {
+        setLoading(true);
+        const [projectsData, campaignsData] = await Promise.all([
+          api.getOrganizationProjects(user.organizationId),
+          api.getCampaigns(user.organizationId)
+        ]);
+        setProjects(projectsData);
+        setCampaigns(campaignsData);
+      } catch (e) {
+        console.error("Failed to refresh organization data", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -50,7 +70,7 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
       }
     }
     loadData();
-  }, [user.organizationId]);
+  }, [user.organizationId, refreshKey]);
 
   const organizationCampaigns = campaigns;
   const allOrgProjects = projects;
@@ -356,7 +376,10 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
 
       <OnboardProjectDialog
         open={onboardProjectOpen}
-        onClose={() => setOnboardProjectOpen(false)}
+        onClose={() => {
+          setOnboardProjectOpen(false);
+          refreshData(); // Refresh projects list when dialog closes
+        }}
         organizationId={user.organizationId || user.id}
       />
 
