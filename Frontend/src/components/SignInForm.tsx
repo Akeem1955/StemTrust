@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useWallet } from './WalletProvider';
 import { InstallWalletGuide } from './InstallWalletGuide';
 import { api } from '../lib/api';
+import { TestnetWarning } from './TestnetWarning';
 
 interface SignInFormProps {
   userType: 'organization' | 'individual' | 'community';
@@ -151,10 +152,10 @@ export function SignInForm({ userType, onSuccess, onSwitchToSignUp }: SignInForm
                   validateWalletAddress(e.target.value);
                 }}
                 className={`pl-10 font-mono text-sm ${walletAddress && !walletValid
-                    ? 'border-red-500 focus:ring-red-500'
-                    : walletAddress && walletValid
-                      ? 'border-green-500 focus:ring-green-500'
-                      : ''
+                  ? 'border-red-500 focus:ring-red-500'
+                  : walletAddress && walletValid
+                    ? 'border-green-500 focus:ring-green-500'
+                    : ''
                   }`}
                 required
               />
@@ -186,6 +187,7 @@ export function SignInForm({ userType, onSuccess, onSwitchToSignUp }: SignInForm
               </div>
             ) : (
               <div className="mt-1 space-y-2">
+                <TestnetWarning />
                 <Alert>
                   <Wallet className="size-4" />
                   <AlertDescription>

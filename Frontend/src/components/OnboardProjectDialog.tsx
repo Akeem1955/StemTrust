@@ -11,6 +11,9 @@ import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { api, OrganizationMember } from '../lib/api';
 import { MilestoneGuideDialog } from './MilestoneGuideDialog';
+import { useWallet } from './WalletProvider';
+import { Transaction, BrowserWallet } from '@meshsdk/core';
+import { TestnetWarning } from './TestnetWarning';
 
 interface OnboardProjectDialogProps {
   open: boolean;
@@ -63,6 +66,7 @@ const FIXED_5_STAGE_TEMPLATE: Omit<MilestoneStage, 'id'>[] = [
 ];
 
 export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardProjectDialogProps) {
+  const { connected, walletName } = useWallet();
   const [submitting, setSubmitting] = useState(false);
   const [researcherEmail, setResearcherEmail] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
@@ -226,8 +230,42 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
       return;
     }
 
+    if (!connected || !walletName) {
+      toast.error('Please connect your wallet to fund this project');
+      return;
+    }
+
+    let transactionHash = undefined;
+
     try {
       setSubmitting(true);
+
+      // --- 1. DEPOSIT FUNDS (Interceptor) ---
+      const fundingAmount = parseFloat(totalFunding);
+      if (fundingAmount > 0) {
+        toast.info('Please sign the transaction to deposit project funds...');
+
+        // Initialize Mesh wallet
+        const wallet = await BrowserWallet.enable(walletName);
+
+        // Calculate amount in Lovelace (1 ADA = 1,000,000 Lovelace)
+        const amountLovelace = (fundingAmount * 1_000_000).toString();
+        // Hardcoded backend wallet address
+        const BACKEND_ADDRESS = "addr_test1qr4nrt2tq4lvaertkvzld379uftynxhk8cauyvnvk094eup6uqtp3qg89u3n2pwku94vjr62jlqa80fh5zwtlr2vl3zqxr2s8d";
+
+        // Create transaction
+        const tx = new Transaction({ initiator: wallet });
+        tx.sendLovelace(BACKEND_ADDRESS, amountLovelace);
+
+        // Build, sign, and submit
+        const unsignedTx = await tx.build();
+        const signedTx = await wallet.signTx(unsignedTx);
+        transactionHash = await wallet.submitTx(signedTx);
+
+        toast.success('Funds deposited successfully! Proceeding to onboard project...');
+      }
+
+      // --- 2. ONBOARD PROJECT (Backend Call) ---
       toast.info('Creating project and locking funds on blockchain...');
 
       // Create milestone structure with funding amounts
@@ -251,6 +289,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
         milestoneMode,
         stagesCount: milestones.length,
         teamMemberIds: selectedMemberIds,
+        transactionHash: transactionHash, // Pass the funding tx hash if available
       });
 
       if (response.emailSent) {
@@ -318,6 +357,7 @@ export function OnboardProjectDialog({ open, onClose, organizationId }: OnboardP
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            <TestnetWarning />
             <Alert>
               <AlertCircle className="size-4" />
               <AlertDescription>

@@ -14,6 +14,7 @@ import { ProjectMembersDialog } from './ProjectMembersDialog';
 import { PendingProjectPreview } from './PendingProjectPreview';
 import { CampaignMilestoneView } from './CampaignMilestoneView';
 import { useWallet } from './WalletProvider';
+import { TestnetWarning } from './TestnetWarning';
 
 interface OrganizationDashboardProps {
   user: User;
@@ -88,6 +89,11 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
               <p className="text-sm text-gray-600">Organization Dashboard</p>
             </div>
             <div className="flex items-center gap-3">
+              {/* Warning for testnet */}
+              <div className="hidden md:block">
+                <TestnetWarning />
+              </div>
+
               {connected ? (
                 <div className="text-sm">
                   <p className="text-gray-600">Wallet Connected • {network}</p>
@@ -382,6 +388,8 @@ export function OrganizationDashboard({ user, onLogout, onViewProject }: Organiz
         }}
         organizationId={user.organizationId || user.id}
       />
+
+
 
       {manageMembersProjectId && (
         <ProjectMembersDialog

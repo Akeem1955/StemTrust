@@ -9,6 +9,7 @@ import { CreateProjectDialog } from './CreateProjectDialog';
 import { MilestoneQuickReference } from './MilestoneQuickReference';
 import { useWallet } from './WalletProvider';
 import { toast } from 'sonner';
+import { TestnetWarning } from './TestnetWarning';
 
 interface IndividualDashboardProps {
   user: User;
@@ -84,6 +85,11 @@ export function IndividualDashboard({ user, onLogout, onViewProject }: Individua
               <p className="text-sm text-gray-600">Researcher Dashboard</p>
             </div>
             <div className="flex items-center gap-3">
+              {/* Warning for testnet */}
+              <div className="hidden md:block">
+                <TestnetWarning />
+              </div>
+
               {connected ? (
                 <div className="text-sm">
                   <p className="text-gray-600">Wallet Connected • {network}</p>

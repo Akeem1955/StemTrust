@@ -4,7 +4,9 @@
 // API CONFIGURATION
 // ============================================
 
-const API_BASE_URL = "http://localhost:3001/api";
+// For Docker/Nginx (Production), use relative path so requests go to the same origin (port 80) and get proxied.
+// For Local Dev, Vite proxy will handle request to http://localhost:3001
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 // ============================================
 // TYPES (Mirrored from Backend)
