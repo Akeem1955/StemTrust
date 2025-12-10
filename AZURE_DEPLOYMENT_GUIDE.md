@@ -98,22 +98,39 @@ JWT_SECRET=supersecret
 
 ---
 
-## ▶️ Step 4: Start the Application
+## 🚀 Step 3: Run the Deployment Script
 
-Run Docker Compose to build and start the containers.
+I have created a script that handles everything (Variables, Cleanup, Build).
 
-```bash
-docker compose up -d --build
-```
-*   `-d`: Detached mode (runs in background).
-*   `--build`: Forces a rebuild of images.
+1.  **Make the script executable:**
+    ```bash
+    chmod +x deploy.sh
+    ```
 
-Check if containers are running:
-```bash
-docker compose ps
-```
+2.  **Run it:**
+    ```bash
+    ./deploy.sh
+    ```
+
+3.  **Wait for the Success Message:**
+    It will set up your environment variables (correcting the database connection for Docker), stop any old versions, and start the new one.
 
 ---
+
+## 🌐 Step 4: Step 5: Open Azure Ports
+
+(If you haven't done this yet)
+1.  Go to **Azure Portal** -> **Virtual Machines** -> Select your VM.
+2.  Click **Networking**.
+3.  Add Inbound Rule: **Port 5173**, **Protocol TCP**, **Allow**.
+
+---
+
+## ✅ Step 5: Access the App
+
+Visit: `http://<your-vm-ip-address>:5173`
+(or `http://stemt-trust.southafricanorth.cloudapp.azure.com:5173`)
+
 
 ## 🌐 Step 5: Open Azure Ports (Network Security Group)
 

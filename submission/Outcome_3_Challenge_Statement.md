@@ -1,6 +1,6 @@
 # Outcome 3: Draft Challenge / Problem Statement
 
-In Abuja's academic ecosystem, promising scientific research is systematically stifled by **opaque funding pathways** and a deep **deficit of trust** between donors and researchers.
+In Nigeria's Stem ecosystem, promising scientific research is systematically stifled by **opaque funding pathways** and a deep **deficit of trust** between donors and researchers.
 
 This matters because while funding exists locally and internationally, the lack of transparency prevents it from reaching the innovators who solve our critical food, health, and environmental challenges.
 
