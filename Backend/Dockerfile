@@ -33,5 +33,5 @@ COPY --from=builder /app/prisma ./prisma
 EXPOSE 8080
 
 # Start command
-# Start command (Run migrations first, then start server)
-CMD ["sh", "-c", "npx prisma db push && node dist/server.js"]
+# Start command
+CMD ["node", "dist/server.js"]
