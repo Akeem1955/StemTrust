@@ -1,4 +1,15 @@
-# Outcome 3: Draft Challenge / Problem Statement
+  
+
+
+
+
+
+
+
+
+
+
+  # Outcome 3: Draft Challenge / Problem Statement
 
 In Nigeria's Stem ecosystem, promising scientific research is systematically stifled by **opaque funding pathways** and a deep **deficit of trust** between donors and researchers.
 
