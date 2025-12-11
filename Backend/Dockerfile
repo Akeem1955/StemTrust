@@ -13,7 +13,7 @@ RUN npm install -g pnpm && pnpm install
 COPY . .
 
 # Generate Prisma Client
-RUN npx prisma generate
+RUN DATABASE_URL="postgresql://dummy:5432/db" npx prisma generate
 
 # Build the application
 RUN npm run build
