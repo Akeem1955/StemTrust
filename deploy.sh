@@ -30,30 +30,35 @@ SMTP_USER=akimy.onboardx@gmail.com
 SMTP_PASS=jgflkkbqeoggxvov
 EOL
 
-# 2. Add .dockerignore files if missing (Safety check)
+# 3. Add .dockerignore files if missing (Safety check)
 echo "🛡️  Ensuring Docker ignore files exist..."
-echo "node_modules" > Backend/.dockerignore
-echo "node_modules" > Frontend/.dockerignore
+cat > Backend/.dockerignore <<EOF
+node_modules
+.env
+EOF
+cat > Frontend/.dockerignore <<EOF
+node_modules
+.env
+EOF
 
-# 3. Stop any existing containers and clear volumes (Fresh start)
+# 4. Stop any existing containers and clear volumes (Fresh start)
 echo "🛑 Stopping old containers..."
 sudo docker compose down -v 2>/dev/null
 
-# 4. Build and Start
+# 5. Build and Start
 echo "🏗️  Building and Starting Containers..."
 sudo docker compose up -d --build
 
-# 5. Verify & Initialize Database
+# 6. Verify & Initialize Database
 echo "✅ Containers Started!"
 echo "⏳ Waiting 15 seconds for Database to initialize..."
 sleep 15
 
-echo "🗄️  Running Database Migrations..."
-# Explicitly pass the DATABASE_URL to ensure it works
-sudo docker compose exec -e DATABASE_URL="postgresql://postgres:postgres@db:5432/stemtrust?schema=public" backend npx prisma db push
+# Migration is now handled automatically by the backend container startup command.
+# command: sh -c "npx prisma migrate deploy && node dist/server.js"
 
 # Optional: Seed data if needed
-# sudo docker compose exec -e DATABASE_URL="postgresql://postgres:postgres@db:5432/stemtrust?schema=public" backend npm run seed
+# sudo docker compose exec backend sh -c 'npm run seed'
 
 echo "🔍 Checking Status..."
 sudo docker compose ps
