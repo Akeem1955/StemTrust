@@ -6,11 +6,12 @@ services:
     ports:
       - "8080:8080"
     command: sh -c "npx prisma migrate deploy && node dist/server.js"
+    env_file:
+      - ./Backend/.env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/stemtrust
       - PORT=8080
       - JWT_SECRET=supersecretkey
-      # Add other env vars from .env here
     depends_on:
       db:
         condition: service_healthy

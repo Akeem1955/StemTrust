@@ -783,8 +783,12 @@ router.post('/onboard', async (req, res) => {
       console.log('[Onboard] Funds locked! TxHash:', txHash);
     } catch (e: any) {
       console.error('[Onboard] Smart contract error:', e);
-      // Delete the project since locking failed
-      await prisma.project.delete({ where: { id: project.id } });
+      // Delete project and milestones since locking failed
+      await prisma.$transaction([
+        prisma.milestone.deleteMany({ where: { projectId: project.id } }),
+        prisma.project.delete({ where: { id: project.id } })
+      ]);
+
       return res.status(500).json({
         success: false,
         error: {
