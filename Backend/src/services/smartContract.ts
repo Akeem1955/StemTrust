@@ -1,10 +1,10 @@
+
 import { MeshWallet, BlockfrostProvider, MeshTxBuilder, serializePlutusScript, deserializeAddress, Data } from '@meshsdk/core';
 import { applyParamsToScript } from "@meshsdk/core-csl";
 import fs from 'fs';
 import path from 'path';
 
 // Load blueprint
-// Assuming running from Backend root
 const blueprintPath = path.resolve(process.cwd(), 'smartcontract/plutus.json');
 let blueprint: any;
 
@@ -41,7 +41,7 @@ export function initSmartContract() {
     }
 }
 
-// Initialize immediately if env vars are present (for backward compatibility if imported after dotenv)
+// Initialize immediately if env vars are present
 if (process.env.BLOCKFROST && process.env.mnemonic) {
     initSmartContract();
 }
@@ -49,7 +49,6 @@ if (process.env.BLOCKFROST && process.env.mnemonic) {
 export function getScript() {
     if (!blueprint) throw new Error("Blueprint not loaded");
 
-    // Find the stem_trust validator
     const validator = blueprint.validators.find((v: any) => v.title === "stemtrust.stem_trust.spend");
 
     if (!validator) {
@@ -76,8 +75,6 @@ export function getTxBuilder() {
     });
 }
 
-// Export buildDatum for consistency with frontend/other parts
-// But internal logic uses direct object construction to match test_project_flow.ts
 export function buildDatum(params: {
     organization: string;
     researcher: string;
@@ -122,10 +119,8 @@ export async function lockFunds(
     console.log(`Backend PubKey Hash: ${signerHash}`);
     console.log(`Script Address: ${scriptAddr}`);
 
-    // IMPORTANT: Store totalFunds in LOVELACE (matches working test_lock_v2.ts)
     const totalFundsLovelace = totalFunds * 1_000_000;
 
-    // Use params if provided, otherwise default to signerHash for testing/custodial
     const org = organizationHash || signerHash;
     const researcher = researcherHash || signerHash;
     const mems = members && members.length > 0 ? members : [signerHash];
@@ -148,17 +143,54 @@ export async function lockFunds(
     console.log(`  researcher: ${researcher}`);
     console.log(`  members: [${mems}]`);
     console.log(`  totalFunds: ${totalFundsLovelace} lovelace (${totalFunds} ADA)`);
-    console.log(`  milestones: [${milestonePercentages.join(', ')}]%`);
-    console.log(`  currentMilestone: 0`);
-
-    console.log(`\nLocking ${totalFunds} ADA...`);
 
     const txBuilder = new MeshTxBuilder({ fetcher: provider, submitter: provider });
+
+    // Custom Input Selection: Accumulate UTXOs until target is met
+    const utxos = await wallet.getUtxos();
+    const targetLovelace = totalFundsLovelace + 5_000_000;
+
+    console.log(`Target (inc. fees): ${targetLovelace / 1_000_000} ADA`);
+    console.log(`Available UTXOs: ${utxos.length}`);
+
+    const sortedUtxos = utxos.sort((a, b) => {
+        const amountA = Number(a.output.amount.find(x => x.unit === 'lovelace')?.quantity || 0);
+        const amountB = Number(b.output.amount.find(x => x.unit === 'lovelace')?.quantity || 0);
+        return amountB - amountA; // Descending
+    });
+
+    let accumulated = 0;
+    const inputsToUse = [];
+
+    for (const u of sortedUtxos) {
+        const amount = Number(u.output.amount.find(x => x.unit === 'lovelace')?.quantity || 0);
+        if (amount === 0) continue;
+
+        accumulated += amount;
+        inputsToUse.push(u);
+
+        if (accumulated >= targetLovelace) break;
+    }
+
+    if (accumulated >= targetLovelace) {
+        console.log(`Selected ${inputsToUse.length} UTXOs covering ${accumulated / 1_000_000} ADA`);
+        for (const input of inputsToUse) {
+            txBuilder.txIn(
+                input.input.txHash,
+                input.input.outputIndex,
+                input.output.amount,
+                input.output.address
+            );
+        }
+    } else {
+        console.warn(`⚠️ Warning: Total wallet balance (${accumulated / 1_000_000} ADA) is less than target (${targetLovelace / 1_000_000} ADA).`);
+    }
+
     await txBuilder
         .txOut(scriptAddr, [{ unit: 'lovelace', quantity: totalFundsLovelace.toString() }])
         .txOutInlineDatumValue(datum)
         .changeAddress(walletAddress)
-        .selectUtxosFrom(await wallet.getUtxos())
+        .selectUtxosFrom(utxos)
         .complete();
 
     const unsignedTx = txBuilder.txHex;
@@ -174,14 +206,14 @@ export async function lockFunds(
 // ============ Step 3: Unlock Funds ============
 export async function releaseFunds(
     milestoneIndex: number,
-    releaseAmountADA: number, // Passed in ADA, converted to lovelace internally to match calculation
+    releaseAmountADA: number, // Passed in ADA
     recipientAddress: string,
-    lockTxHash: string,  // The original lock transaction hash
+    lockTxHash: string,
     datumParams: {
         organization: string;
         researcher: string;
         members: string[];
-        totalFunds: number; // In Lovelace (from DB/previous datum)
+        totalFunds: number; // In Lovelace
         milestones: number[];
         currentMilestone: number;
     }
@@ -196,13 +228,12 @@ export async function releaseFunds(
     const signerHash = deserializeAddress(walletAddress).pubKeyHash;
     const { scriptCbor, scriptAddr } = getScript();
 
-    // Find UTXOs at script - RETRY until we find our exact UTXO
+    // Find UTXOs at script
     let scriptUtxo: any = null;
     for (let attempt = 1; attempt <= 5; attempt++) {
         const scriptUtxos = await provider.fetchAddressUTxOs(scriptAddr);
         console.log(`Attempt ${attempt}: Found ${scriptUtxos.length} UTXOs at script address`);
 
-        // MUST find our exact locked UTXO (no fallback to wrong UTXO!)
         scriptUtxo = scriptUtxos.find((u: any) => u.input.txHash === lockTxHash);
 
         if (scriptUtxo) {
@@ -217,25 +248,17 @@ export async function releaseFunds(
     }
 
     if (!scriptUtxo) {
-        throw new Error(`Could not find UTXO for txHash ${lockTxHash} after 5 attempts. UTXO not yet indexed.`);
+        throw new Error(`Could not find UTXO for txHash ${lockTxHash} after 5 attempts.`);
     }
 
     const currentValue = parseInt(
         scriptUtxo.output.amount.find((a: any) => a.unit === 'lovelace')?.quantity || '0'
     );
     console.log(`Using UTXO: ${scriptUtxo.input.txHash}#${scriptUtxo.input.outputIndex}`);
-    console.log(`Current value in UTXO: ${currentValue / 1_000_000} ADA`);
 
-    // Calculate release amount
-    // NOTE: In the test script this was calc'd from CONFIG. Here we use the passed params which should match.
-    // We trust datumParams.totalFunds is totalFundsLovelace
     const milestonePercentage = datumParams.milestones[milestoneIndex];
     const totalFundsLovelace = datumParams.totalFunds;
     const releaseAmount = Math.floor(totalFundsLovelace * milestonePercentage / 100);
-
-    // Verify calculated release matches requested release (sanity check)
-    // releaseAmountADA is passed from DB. releaseAmount is calc from percentages. They should be close.
-    // We use the ONE calculated from percentages to be consistent with test script logic.
 
     const remainingAmount = currentValue - releaseAmount;
     const isLastMilestone = milestoneIndex >= datumParams.milestones.length - 1;
@@ -243,39 +266,25 @@ export async function releaseFunds(
     console.log(`\nMilestone ${milestoneIndex}: ${milestonePercentage}%`);
     console.log(`Release to researcher: ${releaseAmount / 1_000_000} ADA`);
     console.log(`Remaining in script: ${remainingAmount / 1_000_000} ADA`);
-    console.log(`Researcher: ${recipientAddress}`);
 
-    // Build redeemer
     const redeemer: Data = {
-        alternative: 0,  // ApproveMilestone
-        fields: [milestoneIndex, [signerHash]] // Using signerHash (backend) as the signer in logic
+        alternative: 0,
+        fields: [milestoneIndex, [signerHash]]
     };
-    // Note: In real backend usage, we might need real members. 
-    // But since we are imitating the test solution where backend signs everything:
-    // We will use [signerHash] as the signer list in the redeemer.
-    // AND we must ensure the datum expects this signer (or the signer is in members).
-    // In `projects.ts` we set members = [backendPubKeyHash]. So this aligns.
 
-    console.log(`\nRedeemer: ApproveMilestone(${milestoneIndex}, [signer])`);
-
-    // Build next datum
     const nextDatum: Data = {
         alternative: 0,
         fields: [
             datumParams.organization,
             datumParams.researcher,
             datumParams.members,
-            totalFundsLovelace,     // LOVELACE, same as lock!
+            totalFundsLovelace,
             datumParams.milestones,
-            milestoneIndex + 1      // Increment milestone
+            milestoneIndex + 1
         ],
     };
-    console.log(`Next Datum: currentMilestone = ${milestoneIndex + 1}`);
 
-    // Get wallet UTXOs
     const walletUtxos = await wallet.getUtxos();
-    console.log(`\nWallet has ${walletUtxos.length} UTXOs`);
-
     const collateralUtxo = walletUtxos.find((u: any) => {
         const lovelace = u.output.amount.find((a: any) => a.unit === 'lovelace');
         return lovelace && parseInt(lovelace.quantity) >= 5_000_000;
@@ -286,11 +295,9 @@ export async function releaseFunds(
     }
     console.log(`Collateral: ${collateralUtxo.input.txHash}#${collateralUtxo.input.outputIndex}`);
 
-    // Build transaction
     console.log('\nBuilding transaction...');
     const txBuilder = new MeshTxBuilder({ fetcher: provider, submitter: provider });
 
-    // Spend script UTXO
     await txBuilder
         .spendingPlutusScriptV3()
         .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
@@ -298,12 +305,10 @@ export async function releaseFunds(
         .txInRedeemerValue(redeemer)
         .txInScript(scriptCbor);
 
-    // Pay researcher
     txBuilder.txOut(recipientAddress, [
         { unit: 'lovelace', quantity: releaseAmount.toString() }
     ]);
 
-    // Continuing output if not last milestone
     if (!isLastMilestone && remainingAmount > 2_000_000) {
         console.log(`Adding continuing output: ${remainingAmount / 1_000_000} ADA`);
         txBuilder
@@ -313,10 +318,8 @@ export async function releaseFunds(
             .txOutInlineDatumValue(nextDatum);
     }
 
-    // Required signer
     txBuilder.requiredSignerHash(signerHash);
 
-    // Collateral
     txBuilder.txInCollateral(
         collateralUtxo.input.txHash,
         collateralUtxo.input.outputIndex,
@@ -330,7 +333,6 @@ export async function releaseFunds(
     await txBuilder.complete();
     console.log('✅ Transaction built!');
 
-    // Sign and submit
     const unsignedTx = txBuilder.txHex;
     const signedTx = await wallet.signTx(unsignedTx);
     console.log('✅ Transaction signed!');
@@ -340,31 +342,26 @@ export async function releaseFunds(
 
     console.log(`\n🎉 SUCCESS! TxHash: ${txHash}`);
     console.log(`   View: https://preprod.cardanoscan.io/transaction/${txHash}`);
-    console.log(`   Released ${releaseAmount / 1_000_000} ADA to researcher!`);
 
     return txHash;
 }
 
-// Legacy mock function for backward compatibility
 export async function releaseFundsMock(milestoneId: string, amount: number, recipientAddress: string) {
     console.log(`[Mock Smart Contract] Releasing ${amount} ADA for milestone ${milestoneId} to ${recipientAddress}`);
     return "mock-tx-hash-release";
 }
 
-// Get backend wallet address (for organizations to send funds to)
 export async function getBackendWalletAddress(): Promise<string> {
     if (!wallet) throw new Error("Wallet not initialized");
     const addresses = await wallet.getUsedAddresses();
     return addresses[0];
 }
 
-// Get backend wallet pubkey hash
 export async function getBackendWalletPubKeyHash(): Promise<string> {
     const address = await getBackendWalletAddress();
     return deserializeAddress(address).pubKeyHash;
 }
 
-// Check backend wallet balance
 export async function getBackendWalletBalance(): Promise<number> {
     if (!wallet) throw new Error("Wallet not initialized");
     const balance = await wallet.getBalance();
@@ -372,5 +369,4 @@ export async function getBackendWalletBalance(): Promise<number> {
     return lovelace ? parseInt(lovelace.quantity) / 1_000_000 : 0;
 }
 
-// Export wallet for other uses
 export { wallet, provider };
