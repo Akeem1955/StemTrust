@@ -65,4 +65,5 @@ sudo docker compose ps
 
 echo ""
 echo "🎉 Done! Your app should be live."
-echo "👉 Check http://stemt-trust.southafricanorth.cloudapp.azure.com:5173"
+echo "👉 Access here: https://stemt-trust.southafricanorth.cloudapp.azure.com:5173"
+echo "   (If you type http://, it will automatically switch to https://)"
