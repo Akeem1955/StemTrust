@@ -46,8 +46,9 @@ echo "🛑 Stopping old containers..."
 sudo docker compose down -v 2>/dev/null
 
 # 5. Build and Start
-echo "🏗️  Building and Starting Containers..."
-sudo docker compose up -d --build
+echo "🏗️  Building (Aggressive/No-Cache)..."
+sudo docker compose build --no-cache
+sudo docker compose up -d --force-recreate
 
 # 6. Verify & Initialize Database
 echo "✅ Containers Started!"
