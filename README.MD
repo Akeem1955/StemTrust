@@ -1,5 +1,5 @@
 # StemTrust (ScienceTrust Nigeria) - Project Documentation
-# Project Url: http://stemt-trust.southafricanorth.cloudapp.azure.com:5173/
+# Project Url: https://akimy.me
 
 
 
